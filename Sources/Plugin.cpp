@@ -24,6 +24,7 @@
 
 #include "../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
 
+#include <DicomFormat/DicomMap.h>
 #include <Logging.h>
 #include <SystemToolbox.h>
 #include <Toolbox.h>
@@ -31,6 +32,121 @@
 #include <EmbeddedResources.h>
 
 #include <boost/thread/shared_mutex.hpp>
+
+
+// Reference: https://v3-docs.ohif.org/configuration/dataSources/dicom-json
+
+enum DataType
+{
+  DataType_String,
+  DataType_Integer,
+  DataType_Float,
+  DataType_ListOfFloats,
+  DataType_ListOfStrings,
+  DataType_None
+};
+
+class TagInformation
+{
+private:
+  DataType     type_;
+  std::string  name_;
+  
+public:
+  TagInformation() :
+    type_(DataType_None)
+  {
+  }
+  
+  TagInformation(DataType type,
+                 const std::string& name) :
+    type_(type),
+    name_(name)
+  {
+  }
+
+  DataType GetType() const
+  {
+    return type_;
+  }
+
+  const std::string& GetName() const
+  {
+    return name_;
+  }
+
+  bool operator== (const TagInformation& other) const
+  {
+    return (type_ == other.type_ &&
+            name_ == other.name_);
+  }
+};
+
+typedef std::map<Orthanc::DicomTag, TagInformation>  TagsDictionary;
+
+static TagsDictionary ohifStudyTags_, ohifSeriesTags_, ohifInstanceTags_, allTags_;
+
+static void InitializeOhifTags()
+{
+  ohifStudyTags_[Orthanc::DICOM_TAG_STUDY_INSTANCE_UID] = TagInformation(DataType_String, "StudyInstanceUID");
+  ohifStudyTags_[Orthanc::DICOM_TAG_STUDY_DATE]         = TagInformation(DataType_String, "StudyDate");
+  ohifStudyTags_[Orthanc::DICOM_TAG_STUDY_TIME]         = TagInformation(DataType_String, "StudyTime");
+  ohifStudyTags_[Orthanc::DICOM_TAG_PATIENT_NAME]       = TagInformation(DataType_String, "PatientName"); 
+  ohifStudyTags_[Orthanc::DICOM_TAG_PATIENT_ID]         = TagInformation(DataType_String, "PatientID");
+  ohifStudyTags_[Orthanc::DICOM_TAG_ACCESSION_NUMBER]   = TagInformation(DataType_String, "AccessionNumber");
+  ohifStudyTags_[Orthanc::DicomTag(0x0010, 0x1010)]     = TagInformation(DataType_String, "PatientAge");
+  ohifStudyTags_[Orthanc::DICOM_TAG_PATIENT_SEX]        = TagInformation(DataType_String, "PatientSex");
+
+  ohifSeriesTags_[Orthanc::DICOM_TAG_SERIES_INSTANCE_UID] = TagInformation(DataType_String, "SeriesInstanceUID");
+  ohifSeriesTags_[Orthanc::DICOM_TAG_SERIES_NUMBER]       = TagInformation(DataType_Integer, "SeriesNumber");
+  ohifSeriesTags_[Orthanc::DICOM_TAG_MODALITY]            = TagInformation(DataType_String, "Modality");
+  ohifSeriesTags_[Orthanc::DICOM_TAG_SLICE_THICKNESS]     = TagInformation(DataType_Float, "SliceThickness");
+
+  ohifInstanceTags_[Orthanc::DICOM_TAG_COLUMNS]                    = TagInformation(DataType_Integer, "Columns");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_ROWS]                       = TagInformation(DataType_Integer, "Rows");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_INSTANCE_NUMBER]            = TagInformation(DataType_Integer, "InstanceNumber");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_SOP_CLASS_UID]              = TagInformation(DataType_String, "SOPClassUID");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_PHOTOMETRIC_INTERPRETATION] = TagInformation(DataType_String, "PhotometricInterpretation");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_BITS_ALLOCATED]             = TagInformation(DataType_Integer, "BitsAllocated");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_BITS_STORED]                = TagInformation(DataType_Integer, "BitsStored");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_PIXEL_REPRESENTATION]       = TagInformation(DataType_Integer, "PixelRepresentation");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_SAMPLES_PER_PIXEL]          = TagInformation(DataType_Integer, "SamplesPerPixel");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_PIXEL_SPACING]              = TagInformation(DataType_ListOfFloats, "PixelSpacing");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_HIGH_BIT]                   = TagInformation(DataType_Integer, "HighBit");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_IMAGE_ORIENTATION_PATIENT]  = TagInformation(DataType_ListOfFloats, "ImageOrientationPatient");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_IMAGE_POSITION_PATIENT]     = TagInformation(DataType_ListOfFloats, "ImagePositionPatient");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_FRAME_OF_REFERENCE_UID]     = TagInformation(DataType_String, "FrameOfReferenceUID");
+  ohifInstanceTags_[Orthanc::DicomTag(0x0008, 0x0008)]             = TagInformation(DataType_ListOfStrings, "ImageType");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_MODALITY]                   = TagInformation(DataType_String, "Modality");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_SOP_INSTANCE_UID]           = TagInformation(DataType_String, "SOPInstanceUID");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_SERIES_INSTANCE_UID]        = TagInformation(DataType_String, "SeriesInstanceUID");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_STUDY_INSTANCE_UID]         = TagInformation(DataType_String, "StudyInstanceUID");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_WINDOW_CENTER]              = TagInformation(DataType_Float, "WindowCenter");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_WINDOW_WIDTH]               = TagInformation(DataType_Float, "WindowWidth");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_SERIES_DATE]                = TagInformation(DataType_String, "SeriesDate");
+
+  for (TagsDictionary::const_iterator it = ohifStudyTags_.begin(); it != ohifStudyTags_.end(); ++it)
+  {
+    assert(allTags_.find(it->first) == allTags_.end() ||
+           allTags_[it->first] == it->second);
+    allTags_[it->first] = it->second;
+  }
+
+  for (TagsDictionary::const_iterator it = ohifSeriesTags_.begin(); it != ohifSeriesTags_.end(); ++it)
+  {
+    assert(allTags_.find(it->first) == allTags_.end() ||
+           allTags_[it->first] == it->second);
+    allTags_[it->first] = it->second;
+  }
+
+  for (TagsDictionary::const_iterator it = ohifInstanceTags_.begin(); it != ohifInstanceTags_.end(); ++it)
+  {
+    assert(allTags_.find(it->first) == allTags_.end() ||
+           allTags_[it->first] == it->second);
+    allTags_[it->first] = it->second;
+  }
+}
+
 
 // Forward declaration
 void ReadStaticAsset(std::string& target,
@@ -99,6 +215,77 @@ public:
 };
 
 
+static void GetOhifDicomTags(Json::Value& target,
+                             const std::string& instanceId)
+{
+  Json::Value source;
+  if (!OrthancPlugins::RestApiGet(source, "/instances/" + instanceId + "/tags?short", false))
+  {
+    throw Orthanc::OrthancException(Orthanc::ErrorCode_UnknownResource);
+  }
+
+  if (source.type() != Json::objectValue)
+  {
+    throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError);
+  }
+
+  for (TagsDictionary::const_iterator it = allTags_.begin(); it != allTags_.end(); ++it)
+  {
+    const std::string tag = it->first.Format();
+    
+    if (source.isMember(tag))
+    {
+      const Json::Value& value = source[tag];
+
+      /**
+       * The cases below derive from "Toolbox::SimplifyDicomAsJson()"
+       * with "DicomToJsonFormat_Short", which is invoked by the REST
+       * API call to "/instances/.../tags?short".
+       **/
+
+      switch (value.type())
+      {
+        case Json::nullValue:
+          break;
+          
+        case Json::arrayValue:
+          // This should never happen, as this would correspond to a sequence
+          break;
+
+        case Json::stringValue:
+        {
+          switch (it->second.GetType())
+          {
+            case DataType_String:
+              target[tag] = value;
+              break;
+
+            case DataType_Integer:
+              target[tag] = boost::lexical_cast<int>(value.asString());
+              break;
+
+            case DataType_Float:
+              target[tag] = boost::lexical_cast<float>(value.asString());
+              break;
+
+            default:
+              // TODO
+              break;
+          }
+        }
+
+        default:
+          // This should never happen
+          break;
+      }
+    }
+  }
+  
+  //Orthanc::DicomMap m;
+  
+}
+
+
 static ResourcesCache cache_;
 static std::string    routerBasename_;
 
@@ -149,6 +336,12 @@ OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
   {
     if (changeType == OrthancPluginChangeType_OrthancStarted)
     {
+      /*{
+        Json::Value v;
+        GetOhifDicomTags(v, "4368e7c1-33f7303d-5fc9fcc6-6e5fde31-6959b209");
+        std::cout << v.toStyledString();
+        }*/
+      
       Json::Value info;
       if (!OrthancPlugins::RestApiGet(info, "/plugins/dicom-web", false))
       {
@@ -203,6 +396,8 @@ extern "C"
 #else
     Orthanc::Logging::Initialize(context);
 #endif
+
+    InitializeOhifTags();
 
     OrthancPlugins::OrthancConfiguration configuration;
 
