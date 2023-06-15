@@ -26,6 +26,7 @@
 
 #include <Logging.h>
 #include <SystemToolbox.h>
+#include <Toolbox.h>
 
 #include <EmbeddedResources.h>
 
@@ -99,6 +100,7 @@ public:
 
 
 static ResourcesCache cache_;
+static std::string    routerBasename_;
 
 void ServeFile(OrthancPluginRestOutput* output,
                const char* url,
@@ -120,6 +122,11 @@ void ServeFile(OrthancPluginRestOutput* output,
     Orthanc::EmbeddedResources::GetFileResource(system, Orthanc::EmbeddedResources::APP_CONFIG_SYSTEM);
     Orthanc::EmbeddedResources::GetFileResource(user, Orthanc::EmbeddedResources::APP_CONFIG_USER);
     
+    std::map<std::string, std::string> dictionary;
+    dictionary["ROUTER_BASENAME"] = routerBasename_;
+
+    system = Orthanc::Toolbox::SubstituteVariables(system, dictionary);
+
     std::string s = (user + "\n" + system);
     OrthancPluginAnswerBuffer(context, output, s.c_str(), s.size(), "application/json");
   }
@@ -197,12 +204,21 @@ extern "C"
     Orthanc::Logging::Initialize(context);
 #endif
 
+    OrthancPlugins::OrthancConfiguration configuration;
+
+    {
+      OrthancPlugins::OrthancConfiguration globalConfiguration;
+      globalConfiguration.GetSection(configuration, "OHIF");
+    }
+
+    routerBasename_ = configuration.GetStringValue("RouterBasename", "/ohif");
+
     OrthancPluginSetDescription(context, "OHIF plugin for Orthanc.");
 
     OrthancPlugins::RegisterRestCallback<ServeFile>("/ohif/(.*)", true);
 
     OrthancPluginRegisterOnChangeCallback(context, OnChangeCallback);
-    
+
     // Extend the default Orthanc Explorer with custom JavaScript for OHIF
     std::string explorer;
     Orthanc::EmbeddedResources::GetFileResource(explorer, Orthanc::EmbeddedResources::ORTHANC_EXPLORER);

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-window.config.routerBasename = '/ohif';
+window.config.routerBasename = '${ROUTER_BASENAME}';
 
 window.config.dataSources = [
   {
