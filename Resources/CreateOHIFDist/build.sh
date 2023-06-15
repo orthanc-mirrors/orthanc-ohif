@@ -30,7 +30,7 @@ cd /tmp/
 tar xvf /source/$1.tar.gz
 
 cd /tmp/$1
-yarn install --frozen-lockfile
-QUICK_BUILD=true PUBLIC_URL=./ yarn run build
+HOME=/tmp yarn install --frozen-lockfile
+HOME=/tmp QUICK_BUILD=true PUBLIC_URL=./ yarn run build
 
 cp -r /tmp/$1/platform/app/dist/* /target

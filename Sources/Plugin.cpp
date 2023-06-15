@@ -26,8 +26,10 @@
 
 #include <DicomFormat/DicomMap.h>
 #include <Logging.h>
+#include <SerializationToolbox.h>
 #include <SystemToolbox.h>
 #include <Toolbox.h>
+#include <Compression/GzipCompressor.h>
 
 #include <EmbeddedResources.h>
 
@@ -261,16 +263,55 @@ static void GetOhifDicomTags(Json::Value& target,
               break;
 
             case DataType_Integer:
-              target[tag] = boost::lexical_cast<int>(value.asString());
+            {
+              int32_t v;
+              if (Orthanc::SerializationToolbox::ParseInteger32(v, value.asString()))
+              {
+                target[tag] = v;
+              }
               break;
+            }
 
             case DataType_Float:
-              target[tag] = boost::lexical_cast<float>(value.asString());
+            {
+              float v;
+              if (Orthanc::SerializationToolbox::ParseFloat(v, value.asString()))
+              {
+                target[tag] = v;
+              }
               break;
+            }
+
+            case DataType_ListOfStrings:
+            {
+              std::vector<std::string> tokens;
+              Orthanc::Toolbox::TokenizeString(tokens, value.asString(), '\\');
+              target[tag] = Json::arrayValue;
+              for (size_t i = 0; i < tokens.size(); i++)
+              {
+                target[tag].append(tokens[i]);
+              }
+              break;
+            }
+
+            case DataType_ListOfFloats:
+            {
+              std::vector<std::string> tokens;
+              Orthanc::Toolbox::TokenizeString(tokens, value.asString(), '\\');
+              target[tag] = Json::arrayValue;
+              for (size_t i = 0; i < tokens.size(); i++)
+              {
+                float v;
+                if (Orthanc::SerializationToolbox::ParseFloat(v, tokens[i]))
+                {
+                  target[tag].append(v);
+                }
+              }
+              break;
+            }
 
             default:
-              // TODO
-              break;
+              throw Orthanc::OrthancException(Orthanc::ErrorCode_NotImplemented);
           }
         }
 
@@ -280,9 +321,6 @@ static void GetOhifDicomTags(Json::Value& target,
       }
     }
   }
-  
-  //Orthanc::DicomMap m;
-  
 }
 
 
@@ -338,8 +376,20 @@ OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
     {
       /*{
         Json::Value v;
-        GetOhifDicomTags(v, "4368e7c1-33f7303d-5fc9fcc6-6e5fde31-6959b209");
+        GetOhifDicomTags(v, "54bfd747-407e46b1-ef106fdd-dc19e482-ff8dbe02");
         std::cout << v.toStyledString();
+        std::string s;
+        Orthanc::Toolbox::WriteFastJson(s, v);
+        std::cout << s.size() << std::endl;
+
+        Orthanc::GzipCompressor c;
+        std::string ss;
+        Orthanc::IBufferCompressor::Compress(ss, c, s);
+        std::cout << ss.size() << std::endl;
+
+        std::string sss;
+        Orthanc::Toolbox::EncodeBase64(sss, ss);
+        std::cout << sss.size() << std::endl;
         }*/
       
       Json::Value info;
