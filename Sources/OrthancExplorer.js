@@ -44,7 +44,11 @@ $('#study').live('pagebeforeshow', function() {
       
       b.insertAfter($('#study-info'));
       b.click(function() {
-        window.open('../ohif/viewer?StudyInstanceUIDs=' + studyInstanceUid);
+        if (${USE_DICOM_WEB}) {
+          window.open('../ohif/viewer?StudyInstanceUIDs=' + studyInstanceUid);
+        } else  {
+          window.open('../ohif/viewer?url=../ohif-source/' + studyId);
+        }
       });
     }
   });

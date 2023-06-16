@@ -75,7 +75,7 @@ else()
   set(ENABLE_LOCALE OFF)         # Disable support for locales (notably in Boost)
   set(ENABLE_ZLIB ON)
 
-  set(ENABLE_MODULE_DICOM OFF CACHE INTERNAL "")
+  set(ENABLE_MODULE_DICOM ON CACHE INTERNAL "")
   set(ENABLE_MODULE_IMAGES OFF CACHE INTERNAL "")
   set(ENABLE_MODULE_JOBS OFF CACHE INTERNAL "")
 

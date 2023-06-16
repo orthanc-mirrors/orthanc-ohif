@@ -24,12 +24,13 @@
 
 #include "../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
 
+#include <Compression/GzipCompressor.h>
+#include <DicomFormat/DicomInstanceHasher.h>
 #include <DicomFormat/DicomMap.h>
 #include <Logging.h>
 #include <SerializationToolbox.h>
 #include <SystemToolbox.h>
 #include <Toolbox.h>
-#include <Compression/GzipCompressor.h>
 
 #include <EmbeddedResources.h>
 
@@ -93,6 +94,7 @@ static void InitializeOhifTags()
   ohifStudyTags_[Orthanc::DICOM_TAG_STUDY_INSTANCE_UID] = TagInformation(DataType_String, "StudyInstanceUID");
   ohifStudyTags_[Orthanc::DICOM_TAG_STUDY_DATE]         = TagInformation(DataType_String, "StudyDate");
   ohifStudyTags_[Orthanc::DICOM_TAG_STUDY_TIME]         = TagInformation(DataType_String, "StudyTime");
+  ohifStudyTags_[Orthanc::DICOM_TAG_STUDY_DESCRIPTION]  = TagInformation(DataType_String, "StudyDescription");
   ohifStudyTags_[Orthanc::DICOM_TAG_PATIENT_NAME]       = TagInformation(DataType_String, "PatientName"); 
   ohifStudyTags_[Orthanc::DICOM_TAG_PATIENT_ID]         = TagInformation(DataType_String, "PatientID");
   ohifStudyTags_[Orthanc::DICOM_TAG_ACCESSION_NUMBER]   = TagInformation(DataType_String, "AccessionNumber");
@@ -101,6 +103,7 @@ static void InitializeOhifTags()
 
   ohifSeriesTags_[Orthanc::DICOM_TAG_SERIES_INSTANCE_UID] = TagInformation(DataType_String, "SeriesInstanceUID");
   ohifSeriesTags_[Orthanc::DICOM_TAG_SERIES_NUMBER]       = TagInformation(DataType_Integer, "SeriesNumber");
+  ohifSeriesTags_[Orthanc::DICOM_TAG_SERIES_DESCRIPTION]  = TagInformation(DataType_String, "SeriesDescription");
   ohifSeriesTags_[Orthanc::DICOM_TAG_MODALITY]            = TagInformation(DataType_String, "Modality");
   ohifSeriesTags_[Orthanc::DICOM_TAG_SLICE_THICKNESS]     = TagInformation(DataType_Float, "SliceThickness");
 
@@ -217,13 +220,13 @@ public:
 };
 
 
-static void GetOhifDicomTags(Json::Value& target,
+static bool GetOhifDicomTags(Json::Value& target,
                              const std::string& instanceId)
 {
   Json::Value source;
   if (!OrthancPlugins::RestApiGet(source, "/instances/" + instanceId + "/tags?short", false))
   {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_UnknownResource);
+    return false;
   }
 
   if (source.type() != Json::objectValue)
@@ -321,11 +324,14 @@ static void GetOhifDicomTags(Json::Value& target,
       }
     }
   }
+
+  return true;
 }
 
 
 static ResourcesCache cache_;
 static std::string    routerBasename_;
+static bool           useDicomWeb_;
 
 void ServeFile(OrthancPluginRestOutput* output,
                const char* url,
@@ -339,7 +345,7 @@ void ServeFile(OrthancPluginRestOutput* output,
   OrthancPluginSetHttpHeader(context, output, "Cross-Origin-Opener-Policy", "same-origin");
   OrthancPluginSetHttpHeader(context, output, "Cross-Origin-Resource-Policy", "same-origin");
 
-  std::string uri = request->groups[0];
+  const std::string uri = request->groups[0];
 
   if (uri == "app-config.js")
   {
@@ -349,6 +355,7 @@ void ServeFile(OrthancPluginRestOutput* output,
     
     std::map<std::string, std::string> dictionary;
     dictionary["ROUTER_BASENAME"] = routerBasename_;
+    dictionary["USE_DICOM_WEB"] = (useDicomWeb_ ? "true" : "false");
 
     system = Orthanc::Toolbox::SubstituteVariables(system, dictionary);
 
@@ -366,6 +373,199 @@ void ServeFile(OrthancPluginRestOutput* output,
 }
 
 
+static void GenerateOhifStudy(Json::Value& target,
+                              const std::string& studyId)
+{
+  // https://v3-docs.ohif.org/configuration/dataSources/dicom-json
+  static const char* const KEY_ID = "ID";
+  const std::string KEY_PATIENT_ID = Orthanc::DICOM_TAG_PATIENT_ID.Format();
+  const std::string KEY_STUDY_INSTANCE_UID = Orthanc::DICOM_TAG_STUDY_INSTANCE_UID.Format();
+  const std::string KEY_SERIES_INSTANCE_UID = Orthanc::DICOM_TAG_SERIES_INSTANCE_UID.Format();
+  const std::string KEY_SOP_INSTANCE_UID = Orthanc::DICOM_TAG_SOP_INSTANCE_UID.Format();
+  
+  Json::Value instancesIds;
+  if (!OrthancPlugins::RestApiGet(instancesIds, "/studies/" + studyId + "/instances", false))
+  {
+    throw Orthanc::OrthancException(Orthanc::ErrorCode_UnknownResource);
+  }
+
+  if (instancesIds.type() != Json::arrayValue)
+  {
+    throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError);
+  }
+
+  std::vector<Json::Value> instancesTags;
+  instancesTags.reserve(instancesIds.size());
+
+  for (Json::ArrayIndex i = 0; i < instancesIds.size(); i++)
+  {
+    if (instancesIds[i].type() != Json::objectValue ||
+        !instancesIds[i].isMember(KEY_ID) ||
+        instancesIds[i][KEY_ID].type() != Json::stringValue)
+    {
+      throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError);
+    }
+
+    Json::Value t;
+    if (GetOhifDicomTags(t, instancesIds[i][KEY_ID].asString()))
+    {
+      instancesTags.push_back(t);
+    }
+  }
+
+  typedef std::list<const Json::Value*>           ListOfResources;
+  typedef std::map<std::string, ListOfResources>  MapOfResources;
+
+  MapOfResources studies;
+  for (Json::ArrayIndex i = 0; i < instancesTags.size(); i++)
+  {
+    if (instancesTags[i].isMember(KEY_STUDY_INSTANCE_UID))
+    {
+      if (instancesTags[i][KEY_STUDY_INSTANCE_UID].type() != Json::stringValue)
+      {
+        throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError);
+      }
+      else
+      {
+        const std::string& studyInstanceUid = instancesTags[i][KEY_STUDY_INSTANCE_UID].asString();
+        studies[studyInstanceUid].push_back(&instancesTags[i]);
+      }
+    }
+  }
+
+  target["studies"] = Json::arrayValue;
+  
+  for (MapOfResources::const_iterator it = studies.begin(); it != studies.end(); ++it)
+  {
+    if (!it->second.empty())
+    {
+      assert(it->second.front() != NULL);
+      const Json::Value& firstInstanceInStudy = *it->second.front();
+      
+      Json::Value study = Json::objectValue;
+      for (TagsDictionary::const_iterator tag = ohifStudyTags_.begin(); tag != ohifStudyTags_.end(); ++tag)
+      {
+        if (firstInstanceInStudy.isMember(tag->first.Format()))
+        {
+          study[tag->second.GetName()] = firstInstanceInStudy[tag->first.Format()];
+        }
+      }
+
+      MapOfResources seriesInStudy;
+      for (ListOfResources::const_iterator it2 = it->second.begin(); it2 != it->second.end(); ++it2)
+      {
+        assert(*it2 != NULL);
+        const Json::Value& instanceInStudy = **it2;
+        
+        if (instanceInStudy.isMember(KEY_SERIES_INSTANCE_UID))
+        {
+          if (instanceInStudy[KEY_SERIES_INSTANCE_UID].type() != Json::stringValue)
+          {
+            throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError);
+          }
+          else
+          {
+            const std::string& seriesInstanceUid = instanceInStudy[KEY_SERIES_INSTANCE_UID].asString();
+            seriesInStudy[seriesInstanceUid].push_back(&instanceInStudy);
+          }
+        }
+      }
+
+      study["series"] = Json::arrayValue;
+
+      for (MapOfResources::const_iterator it3 = seriesInStudy.begin(); it3 != seriesInStudy.end(); ++it3)
+      {
+        if (!it3->second.empty())
+        {
+          assert(it3->second.front() != NULL);
+          const Json::Value& firstInstanceInSeries = *it3->second.front();
+
+          Json::Value series = Json::objectValue;
+          for (TagsDictionary::const_iterator tag = ohifSeriesTags_.begin(); tag != ohifSeriesTags_.end(); ++tag)
+          {
+            if (firstInstanceInSeries.isMember(tag->first.Format()))
+            {
+              series[tag->second.GetName()] = firstInstanceInSeries[tag->first.Format()];
+            }
+          }
+
+          series["instances"] = Json::arrayValue;
+
+          for (ListOfResources::const_iterator it4 = it3->second.begin(); it4 != it3->second.end(); ++it4)
+          {
+            assert(*it4 != NULL);
+            const Json::Value& instanceInSeries = **it4;
+
+            Json::Value metadata;
+            for (TagsDictionary::const_iterator tag = ohifInstanceTags_.begin(); tag != ohifInstanceTags_.end(); ++tag)
+            {
+              if (instanceInSeries.isMember(tag->first.Format()))
+              {
+                metadata[tag->second.GetName()] = instanceInSeries[tag->first.Format()];
+              }
+            }
+
+            Orthanc::DicomInstanceHasher hasher(instanceInSeries[KEY_PATIENT_ID].asString(),
+                                                instanceInSeries[KEY_STUDY_INSTANCE_UID].asString(),
+                                                instanceInSeries[KEY_SERIES_INSTANCE_UID].asString(),
+                                                instanceInSeries[KEY_SOP_INSTANCE_UID].asString());
+
+            Json::Value instance = Json::objectValue;
+            instance["metadata"] = metadata;
+            instance["url"] = "dicomweb:../instances/" + hasher.HashInstance() + "/file";
+
+            series["instances"].append(instance);
+          }
+
+          study["series"].append(series);
+        }
+      }
+
+      target["studies"].append(study);
+    }
+  }  
+}
+
+
+void GetOhifStudy(OrthancPluginRestOutput* output,
+                  const char* url,
+                  const OrthancPluginHttpRequest* request)
+{
+  OrthancPluginContext* context = OrthancPlugins::GetGlobalContext();
+
+  const std::string studyId = request->groups[0];
+
+  Json::Value v;
+  GenerateOhifStudy(v, studyId);
+
+  std::string s;
+  Orthanc::Toolbox::WriteFastJson(s, v);
+  
+  OrthancPluginAnswerBuffer(context, output, s.c_str(), s.size(), "application/json");
+}
+
+
+static OrthancPluginErrorCode RedirectRoot(OrthancPluginRestOutput* output,
+                                           const char* url,
+                                           const OrthancPluginHttpRequest* request)
+{
+  OrthancPluginContext* context = OrthancPlugins::GetGlobalContext();
+
+  if (request->method != OrthancPluginHttpMethod_Get)
+  {
+    OrthancPluginSendMethodNotAllowed(context, output, "GET");
+  }
+  else
+  {
+    // TODO - Is there a better way to go to the list of studies in DICOMweb?
+    // TODO - What if not using DICOMweb?
+    OrthancPluginRedirect(context, output, "ohif/viewer?StudyInstanceUIDs=");
+  }
+
+  return OrthancPluginErrorCode_Success;
+}
+
+
 OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
                                         OrthancPluginResourceType resourceType,
                                         const char* resourceId)
@@ -374,41 +574,26 @@ OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
   {
     if (changeType == OrthancPluginChangeType_OrthancStarted)
     {
-      /*{
-        Json::Value v;
-        GetOhifDicomTags(v, "54bfd747-407e46b1-ef106fdd-dc19e482-ff8dbe02");
-        std::cout << v.toStyledString();
-        std::string s;
-        Orthanc::Toolbox::WriteFastJson(s, v);
-        std::cout << s.size() << std::endl;
-
-        Orthanc::GzipCompressor c;
-        std::string ss;
-        Orthanc::IBufferCompressor::Compress(ss, c, s);
-        std::cout << ss.size() << std::endl;
-
-        std::string sss;
-        Orthanc::Toolbox::EncodeBase64(sss, ss);
-        std::cout << sss.size() << std::endl;
-        }*/
-      
-      Json::Value info;
-      if (!OrthancPlugins::RestApiGet(info, "/plugins/dicom-web", false))
+      if (useDicomWeb_)
       {
-        throw Orthanc::OrthancException(
-          Orthanc::ErrorCode_InternalError,
-          "The OHIF plugin requires the DICOMweb plugin to be installed");
-      }
+        Json::Value info;
+        if (!OrthancPlugins::RestApiGet(info, "/plugins/dicom-web", false))
+        {
+          throw Orthanc::OrthancException(
+            Orthanc::ErrorCode_InternalError,
+            "The OHIF plugin requires the DICOMweb plugin to be installed");
+        }
 
-      if (info.type() != Json::objectValue ||
-          !info.isMember("ID") ||
-          !info.isMember("Version") ||
-          info["ID"].type() != Json::stringValue ||
-          info["Version"].type() != Json::stringValue ||
-          info["ID"].asString() != "dicom-web")
-      {
-        throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError,
-                                        "The DICOMweb plugin is not properly installed");
+        if (info.type() != Json::objectValue ||
+            !info.isMember("ID") ||
+            !info.isMember("Version") ||
+            info["ID"].type() != Json::stringValue ||
+            info["Version"].type() != Json::stringValue ||
+            info["ID"].asString() != "dicom-web")
+        {
+          throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError,
+                                          "The DICOMweb plugin is required by OHIF, but is not properly installed");
+        }
       }
     }
   }
@@ -457,17 +642,27 @@ extern "C"
     }
 
     routerBasename_ = configuration.GetStringValue("RouterBasename", "/ohif");
+    useDicomWeb_ = configuration.GetBooleanValue("DicomWeb", false);
 
     OrthancPluginSetDescription(context, "OHIF plugin for Orthanc.");
 
+    OrthancPluginRegisterRestCallback(context, "/ohif", RedirectRoot);
     OrthancPlugins::RegisterRestCallback<ServeFile>("/ohif/(.*)", true);
+    OrthancPlugins::RegisterRestCallback<GetOhifStudy>("/ohif-source/(.*)", true);
 
     OrthancPluginRegisterOnChangeCallback(context, OnChangeCallback);
 
-    // Extend the default Orthanc Explorer with custom JavaScript for OHIF
-    std::string explorer;
-    Orthanc::EmbeddedResources::GetFileResource(explorer, Orthanc::EmbeddedResources::ORTHANC_EXPLORER);
-    OrthancPluginExtendOrthancExplorer(context, explorer.c_str());
+    {
+      // Extend the default Orthanc Explorer with custom JavaScript for OHIF
+      std::string explorer;
+      Orthanc::EmbeddedResources::GetFileResource(explorer, Orthanc::EmbeddedResources::ORTHANC_EXPLORER);
+
+      std::map<std::string, std::string> dictionary;
+      dictionary["USE_DICOM_WEB"] = (useDicomWeb_ ? "true" : "false");
+      explorer = Orthanc::Toolbox::SubstituteVariables(explorer, dictionary);
+      
+      OrthancPluginExtendOrthancExplorer(context, explorer.c_str());
+    }
 
     return 0;
   }

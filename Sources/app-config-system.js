@@ -6,29 +6,46 @@
 
 window.config.routerBasename = '${ROUTER_BASENAME}';
 
-window.config.dataSources = [
-  {
-    friendlyName: 'Orthanc',
-    namespace: '@ohif/extension-default.dataSourcesModule.dicomweb',
-    sourceName: 'dicomweb',
-    configuration: {
-      name: 'orthanc',
+if (${USE_DICOM_WEB}) {
+  window.config.dataSources = [
+    {
+      friendlyName: 'Orthanc DICOMweb',
+      namespace: '@ohif/extension-default.dataSourcesModule.dicomweb',
+      sourceName: 'dicomweb',
+      configuration: {
+        name: 'orthanc',
 
-      wadoUriRoot: '../dicom-web',
-      qidoRoot: '../dicom-web',
-      wadoRoot: '../dicom-web',
-      
-      qidoSupportsIncludeField: false,
-      supportsReject: false,
-      imageRendering: 'wadors',
-      thumbnailRendering: 'wadors',
-      enableStudyLazyLoad: true,
-      supportsFuzzyMatching: false,
-      supportsWildcard: true,
-      staticWado: true,
-      singlepart: 'bulkdata'
+        wadoUriRoot: '../dicom-web',
+        qidoRoot: '../dicom-web',
+        wadoRoot: '../dicom-web',
+        
+        qidoSupportsIncludeField: false,
+        supportsReject: false,
+        imageRendering: 'wadors',
+        thumbnailRendering: 'wadors',
+        enableStudyLazyLoad: true,
+        supportsFuzzyMatching: false,
+        supportsWildcard: true,
+        staticWado: true,
+        singlepart: 'bulkdata'
+      }
     }
-  }
-];
+  ];
 
-window.config.defaultDataSourceName = 'dicomweb';
+  window.config.defaultDataSourceName = 'dicomweb';
+
+} else {
+  window.config.showStudyList = false;
+  window.config.dataSources = [
+    {
+      friendlyName: 'Orthanc JSON',
+      namespace: '@ohif/extension-default.dataSourcesModule.dicomjson',
+      sourceName: 'dicomjson',
+      configuration: {
+        name: 'json',
+      },
+    }
+  ];
+
+  window.config.defaultDataSourceName = 'dicomjson';
+}
