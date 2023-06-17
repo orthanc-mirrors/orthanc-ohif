@@ -53,3 +53,31 @@ $('#study').live('pagebeforeshow', function() {
     }
   });
 });
+
+
+if (${USE_DICOM_WEB}) {
+  $('#lookup').live('pagebeforeshow', function() {
+    $('#open-ohif-study-list').remove();
+    
+    var b = $('<fieldset>')
+        .attr('id', 'open-ohif-study-list')
+        .addClass('ui-grid-b')
+        .append($('<div>')
+                .addClass('ui-block-a'))
+        .append($('<div>')
+                .addClass('ui-block-b')
+                .append($('<a>')
+                        .attr('id', 'coucou')
+                        .attr('data-role', 'button')
+                        .attr('href', '#')
+                        .attr('data-icon', 'forward')
+                        .attr('data-theme', 'a')
+                        .text('Open OHIF study list')
+                        .button()
+                        .click(function(e) {
+                          window.open('../ohif/');
+                        })));
+    
+    b.insertAfter($('#lookup-result'));
+  });
+}

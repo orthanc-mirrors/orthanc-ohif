@@ -345,7 +345,11 @@ void ServeFile(OrthancPluginRestOutput* output,
   OrthancPluginSetHttpHeader(context, output, "Cross-Origin-Opener-Policy", "same-origin");
   OrthancPluginSetHttpHeader(context, output, "Cross-Origin-Resource-Policy", "same-origin");
 
-  const std::string uri = request->groups[0];
+  std::string uri;
+  if (request->groupsCount > 0)
+  {
+    uri = request->groups[0];
+  }
 
   if (uri == "app-config.js")
   {
@@ -362,8 +366,12 @@ void ServeFile(OrthancPluginRestOutput* output,
     std::string s = (user + "\n" + system);
     OrthancPluginAnswerBuffer(context, output, s.c_str(), s.size(), "application/json");
   }
-  else if (uri == "viewer")
-  {  
+  else if (uri == "" ||      // Study list
+           uri == "tmtv" ||  // Total metabolic tumor volume
+           uri == "viewer")  // Default viewer (including MPR)
+  {
+    // Those correspond to the different modes of the OHIF platform:
+    // https://v3-docs.ohif.org/platform/modes/
     cache_.Answer(context, output, "index.html");
   }
   else 
@@ -545,27 +553,6 @@ void GetOhifStudy(OrthancPluginRestOutput* output,
 }
 
 
-static OrthancPluginErrorCode RedirectRoot(OrthancPluginRestOutput* output,
-                                           const char* url,
-                                           const OrthancPluginHttpRequest* request)
-{
-  OrthancPluginContext* context = OrthancPlugins::GetGlobalContext();
-
-  if (request->method != OrthancPluginHttpMethod_Get)
-  {
-    OrthancPluginSendMethodNotAllowed(context, output, "GET");
-  }
-  else
-  {
-    // TODO - Is there a better way to go to the list of studies in DICOMweb?
-    // TODO - What if not using DICOMweb?
-    OrthancPluginRedirect(context, output, "ohif/viewer?StudyInstanceUIDs=");
-  }
-
-  return OrthancPluginErrorCode_Success;
-}
-
-
 OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
                                         OrthancPluginResourceType resourceType,
                                         const char* resourceId)
@@ -644,9 +631,16 @@ extern "C"
     routerBasename_ = configuration.GetStringValue("RouterBasename", "/ohif");
     useDicomWeb_ = configuration.GetBooleanValue("DicomWeb", false);
 
+    // Make sure that the router basename ends with a trailing slash
+    if (routerBasename_.empty() ||
+        routerBasename_[routerBasename_.size() - 1] != '/')
+    {
+      routerBasename_ += "/";
+    }
+
     OrthancPluginSetDescription(context, "OHIF plugin for Orthanc.");
 
-    OrthancPluginRegisterRestCallback(context, "/ohif", RedirectRoot);
+    OrthancPlugins::RegisterRestCallback<ServeFile>("/ohif", true);
     OrthancPlugins::RegisterRestCallback<ServeFile>("/ohif/(.*)", true);
     OrthancPlugins::RegisterRestCallback<GetOhifStudy>("/ohif-source/(.*)", true);
 
