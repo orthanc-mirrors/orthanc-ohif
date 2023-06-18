@@ -43,6 +43,14 @@ static const std::string  METADATA_OHIF = "4202";
 static const char* const  KEY_VERSION = "Version";
 static const unsigned int MAX_INSTANCES_IN_QUEUE = 10000;
 
+
+enum DataSource
+{
+  DataSource_DicomWeb,
+  DataSource_DicomJson
+};
+
+
 // Reference: https://v3-docs.ohif.org/configuration/dataSources/dicom-json
 
 enum DataType
@@ -486,7 +494,8 @@ static bool GetOhifInstance(Json::Value& target,
 
 static ResourcesCache               cache_;
 static std::string                  routerBasename_;
-static bool                         useDicomWeb_;
+static DataSource                   dataSource_;
+static bool                         preload_;
 static boost::thread                metadataThread_;
 static Orthanc::SharedMessageQueue  pendingInstances_;
 static bool                         continueThread_;
@@ -517,7 +526,7 @@ void ServeFile(OrthancPluginRestOutput* output,
     
     std::map<std::string, std::string> dictionary;
     dictionary["ROUTER_BASENAME"] = routerBasename_;
-    dictionary["USE_DICOM_WEB"] = (useDicomWeb_ ? "true" : "false");
+    dictionary["USE_DICOM_WEB"] = (dataSource_ == DataSource_DicomWeb ? "true" : "false");
 
     system = Orthanc::Toolbox::SubstituteVariables(system, dictionary);
 
@@ -745,31 +754,50 @@ OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
       {
         continueThread_ = true;
 
-        if (useDicomWeb_)
+        switch (dataSource_)
         {
-          Json::Value info;
-          if (!OrthancPlugins::RestApiGet(info, "/plugins/dicom-web", false))
+          case DataSource_DicomWeb:
           {
-            throw Orthanc::OrthancException(
-              Orthanc::ErrorCode_InternalError,
-              "The OHIF plugin requires the DICOMweb plugin to be installed");
+            Json::Value info;
+            if (!OrthancPlugins::RestApiGet(info, "/plugins/dicom-web", false))
+            {
+              throw Orthanc::OrthancException(
+                Orthanc::ErrorCode_InternalError,
+                "The OHIF plugin requires the DICOMweb plugin to be installed");
+            }
+
+            if (info.type() != Json::objectValue ||
+                !info.isMember("ID") ||
+                !info.isMember("Version") ||
+                info["ID"].type() != Json::stringValue ||
+                info["Version"].type() != Json::stringValue ||
+                info["ID"].asString() != "dicom-web")
+            {
+              throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError,
+                                              "The DICOMweb plugin is required by OHIF, but is not properly installed");
+            }
+
+            break;
           }
 
-          if (info.type() != Json::objectValue ||
-              !info.isMember("ID") ||
-              !info.isMember("Version") ||
-              info["ID"].type() != Json::stringValue ||
-              info["Version"].type() != Json::stringValue ||
-              info["ID"].asString() != "dicom-web")
+          case DataSource_DicomJson:
           {
-            throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError,
-                                            "The DICOMweb plugin is required by OHIF, but is not properly installed");
+            if (preload_)
+            {
+              metadataThread_ = boost::thread(MetadataThread);
+              LOG(INFO) << "Started the OHIF preload thread";
+            }
+            else
+            {
+              LOG(INFO) << "The OHIF preload thread was not started, as indicated in the configuration file";
+            }
+            break;
           }
+
+          default:
+            throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange);
         }
-        else
-        {
-          metadataThread_ = boost::thread(MetadataThread);
-        }
+        
         break;
       }
 
@@ -779,6 +807,7 @@ OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
 
         if (metadataThread_.joinable())
         {
+          LOG(INFO) << "Stopping the OHIF preload thread";
           metadataThread_.join();
         }
         break;
@@ -787,7 +816,7 @@ OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
       case OrthancPluginChangeType_NewInstance:
       {
         if (metadataThread_.joinable() &&
-            pendingInstances_.GetSize() < MAX_INSTANCES_IN_QUEUE)
+            pendingInstances_.GetSize() < MAX_INSTANCES_IN_QUEUE) /* avoid overwhelming Orthanc */
         {
           pendingInstances_.Enqueue(new Orthanc::SingleValueObject<std::string>(resourceId));
         }
@@ -834,43 +863,66 @@ extern "C"
     Orthanc::Logging::Initialize(context);
 #endif
 
-    InitializeOhifTags();
-
-    OrthancPlugins::OrthancConfiguration configuration;
-
+    try
     {
-      OrthancPlugins::OrthancConfiguration globalConfiguration;
-      globalConfiguration.GetSection(configuration, "OHIF");
-    }
+      InitializeOhifTags();
 
-    routerBasename_ = configuration.GetStringValue("RouterBasename", "/ohif");
-    useDicomWeb_ = configuration.GetBooleanValue("DicomWeb", false);
+      OrthancPlugins::OrthancConfiguration configuration;
 
-    // Make sure that the router basename ends with a trailing slash
-    if (routerBasename_.empty() ||
-        routerBasename_[routerBasename_.size() - 1] != '/')
-    {
-      routerBasename_ += "/";
-    }
+      {
+        OrthancPlugins::OrthancConfiguration globalConfiguration;
+        globalConfiguration.GetSection(configuration, "OHIF");
+      }
 
-    OrthancPluginSetDescription(context, "OHIF plugin for Orthanc.");
+      routerBasename_ = configuration.GetStringValue("RouterBasename", "/ohif");
+      std::string s = configuration.GetStringValue("DataSource", "dicom-json");
+      preload_ = configuration.GetBooleanValue("Preload", true);
 
-    OrthancPlugins::RegisterRestCallback<ServeFile>("/ohif", true);
-    OrthancPlugins::RegisterRestCallback<ServeFile>("/ohif/(.*)", true);
-    OrthancPlugins::RegisterRestCallback<GetOhifStudy>("/studies/([0-9a-f-]+)/ohif-dicom-json", true);
+      if (s == "dicom-web")
+      {
+        dataSource_ = DataSource_DicomWeb;
+      }
+      else if (s == "dicom-json")
+      {
+        dataSource_ = DataSource_DicomJson;
+      }
+      else
+      {
+        throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
+                                        "Configuration option \"OHIF.DataSource\" must be either "
+                                        "\"dicomweb\" or \"dicom-json\", but found: " + s);
+      }
 
-    OrthancPluginRegisterOnChangeCallback(context, OnChangeCallback);
+      // Make sure that the router basename ends with a trailing slash
+      if (routerBasename_.empty() ||
+          routerBasename_[routerBasename_.size() - 1] != '/')
+      {
+        routerBasename_ += "/";
+      }
 
-    {
-      // Extend the default Orthanc Explorer with custom JavaScript for OHIF
-      std::string explorer;
-      Orthanc::EmbeddedResources::GetFileResource(explorer, Orthanc::EmbeddedResources::ORTHANC_EXPLORER);
+      OrthancPluginSetDescription(context, "OHIF plugin for Orthanc.");
 
-      std::map<std::string, std::string> dictionary;
-      dictionary["USE_DICOM_WEB"] = (useDicomWeb_ ? "true" : "false");
-      explorer = Orthanc::Toolbox::SubstituteVariables(explorer, dictionary);
+      OrthancPlugins::RegisterRestCallback<ServeFile>("/ohif", true);
+      OrthancPlugins::RegisterRestCallback<ServeFile>("/ohif/(.*)", true);
+      OrthancPlugins::RegisterRestCallback<GetOhifStudy>("/studies/([0-9a-f-]+)/ohif-dicom-json", true);
+
+      OrthancPluginRegisterOnChangeCallback(context, OnChangeCallback);
+
+      {
+        // Extend the default Orthanc Explorer with custom JavaScript for OHIF
+        std::string explorer;
+        Orthanc::EmbeddedResources::GetFileResource(explorer, Orthanc::EmbeddedResources::ORTHANC_EXPLORER);
+
+        std::map<std::string, std::string> dictionary;
+        dictionary["USE_DICOM_WEB"] = (dataSource_ == DataSource_DicomWeb ? "true" : "false");
+        explorer = Orthanc::Toolbox::SubstituteVariables(explorer, dictionary);
       
-      OrthancPluginExtendOrthancExplorer(context, explorer.c_str());
+        OrthancPluginExtendOrthancExplorer(context, explorer.c_str());
+      }
+    }
+    catch (Orthanc::OrthancException& e)
+    {
+      return -1;
     }
 
     return 0;
