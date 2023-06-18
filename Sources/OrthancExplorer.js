@@ -22,6 +22,21 @@
  **/
 
 
+function AddOhifViewer(target, name, callback) {
+  var li = $('<li>', {
+    name: name,
+  }).click(callback);
+
+  li.append($('<a>', {
+    href: '#',
+    rel: 'close',
+    text: name
+  }));
+
+  target.append(li);
+}
+
+
 $('#study').live('pagebeforeshow', function() {
   var studyId = $.mobile.pageData.uuid;
 
@@ -43,12 +58,48 @@ $('#study').live('pagebeforeshow', function() {
           .button();
       
       b.insertAfter($('#study-info'));
+      
       b.click(function() {
-        if (${USE_DICOM_WEB}) {
-          window.open('../ohif/viewer?StudyInstanceUIDs=' + studyInstanceUid);
-        } else  {
-          window.open('../ohif/viewer?url=../ohif-source/' + studyId);
-        }
+        var viewers = $('<ul>')
+            .attr('data-divider-theme', 'd')
+            .attr('data-role', 'listview');
+
+        // The list of OHIF viewers can be found at: https://docs.ohif.org/
+
+        AddOhifViewer(viewers, 'Basic viewer', function() {
+          if (${USE_DICOM_WEB}) {
+            window.open('../ohif/viewer?StudyInstanceUIDs=' + studyInstanceUid);
+          } else  {
+            window.open('../ohif/viewer?url=../ohif-source/' + studyId);
+          }
+        });
+
+        AddOhifViewer(viewers, 'Volume rendering', function() {
+          if (${USE_DICOM_WEB}) {
+            window.open('../ohif/viewer?hangingprotocolId=mprAnd3DVolumeViewport&StudyInstanceUIDs=' + studyInstanceUid);
+          } else  {
+            window.open('../ohif/viewer?hangingprotocolId=mprAnd3DVolumeViewport&url=../ohif-source/' + studyId);
+          }
+        });
+
+        AddOhifViewer(viewers, 'Total metabolic tumor volume', function() {
+          if (${USE_DICOM_WEB}) {
+            window.open('../ohif/tmtv?StudyInstanceUIDs=' + studyInstanceUid);
+          } else  {
+            window.open('../ohif/tmtv?url=../ohif-source/' + studyId);
+          }
+        });
+
+        // Launch the dialog
+        $('#dialog').simpledialog2({
+          mode: 'blank',
+          animate: false,
+          headerText: 'Choose OHIF viewer',
+          headerClose: true,
+          forceInput: false,
+          width: '100%',
+          blankContent: viewers
+        });
       });
     }
   });

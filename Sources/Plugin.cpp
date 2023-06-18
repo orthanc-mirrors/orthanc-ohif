@@ -91,6 +91,11 @@ static TagsDictionary ohifStudyTags_, ohifSeriesTags_, ohifInstanceTags_, allTag
 
 static void InitializeOhifTags()
 {
+  /**
+   * Those are the tags that are found in the documentation of the
+   * "DICOM JSON" data source:
+   * https://docs.ohif.org/configuration/dataSources/dicom-json
+   **/
   ohifStudyTags_[Orthanc::DICOM_TAG_STUDY_INSTANCE_UID] = TagInformation(DataType_String, "StudyInstanceUID");
   ohifStudyTags_[Orthanc::DICOM_TAG_STUDY_DATE]         = TagInformation(DataType_String, "StudyDate");
   ohifStudyTags_[Orthanc::DICOM_TAG_STUDY_TIME]         = TagInformation(DataType_String, "StudyTime");
@@ -129,6 +134,17 @@ static void InitializeOhifTags()
   ohifInstanceTags_[Orthanc::DICOM_TAG_WINDOW_CENTER]              = TagInformation(DataType_Float, "WindowCenter");
   ohifInstanceTags_[Orthanc::DICOM_TAG_WINDOW_WIDTH]               = TagInformation(DataType_Float, "WindowWidth");
   ohifInstanceTags_[Orthanc::DICOM_TAG_SERIES_DATE]                = TagInformation(DataType_String, "SeriesDate");
+
+  /**
+   * The items below are related to PET scans. Their list can be found
+   * by looking for "required metadata are missing" in
+   * "extensions/default/src/getPTImageIdInstanceMetadata.ts"
+   **/
+  ohifInstanceTags_[Orthanc::DICOM_TAG_SERIES_TIME]    = TagInformation(DataType_String, "SeriesTime");
+  ohifInstanceTags_[Orthanc::DicomTag(0x0010, 0x1030)] = TagInformation(DataType_Float, "PatientWeight");
+  ohifInstanceTags_[Orthanc::DicomTag(0x0028, 0x0051)] = TagInformation(DataType_ListOfStrings, "CorrectedImage");
+  ohifInstanceTags_[Orthanc::DicomTag(0x0054, 0x1001)] = TagInformation(DataType_String, "Units");
+  ohifInstanceTags_[Orthanc::DicomTag(0x0054, 0x1102)] = TagInformation(DataType_String, "DecayCorrection");
 
   for (TagsDictionary::const_iterator it = ohifStudyTags_.begin(); it != ohifStudyTags_.end(); ++it)
   {
