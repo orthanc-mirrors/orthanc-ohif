@@ -28,18 +28,20 @@
 #include <DicomFormat/DicomInstanceHasher.h>
 #include <DicomFormat/DicomMap.h>
 #include <Logging.h>
+#include <MultiThreading/SharedMessageQueue.h>
 #include <SerializationToolbox.h>
 #include <SystemToolbox.h>
 #include <Toolbox.h>
 
 #include <EmbeddedResources.h>
 
+#include <boost/thread.hpp>
 #include <boost/thread/shared_mutex.hpp>
 
 
-static const std::string METADATA_OHIF = "4202";
-static const char* const KEY_VERSION = "Version";
-
+static const std::string  METADATA_OHIF = "4202";
+static const char* const  KEY_VERSION = "Version";
+static const unsigned int MAX_INSTANCES_IN_QUEUE = 10000;
 
 // Reference: https://v3-docs.ohif.org/configuration/dataSources/dicom-json
 
@@ -482,9 +484,12 @@ static bool GetOhifInstance(Json::Value& target,
 }
 
 
-static ResourcesCache cache_;
-static std::string    routerBasename_;
-static bool           useDicomWeb_;
+static ResourcesCache               cache_;
+static std::string                  routerBasename_;
+static bool                         useDicomWeb_;
+static boost::thread                metadataThread_;
+static Orthanc::SharedMessageQueue  pendingInstances_;
+static bool                         continueThread_;
 
 void ServeFile(OrthancPluginRestOutput* output,
                const char* url,
@@ -706,35 +711,92 @@ void GetOhifStudy(OrthancPluginRestOutput* output,
 }
 
 
+static void MetadataThread()
+{
+  while (continueThread_)
+  {
+    std::unique_ptr<Orthanc::IDynamicObject> instance(pendingInstances_.Dequeue(100));
+    if (instance.get() != NULL)
+    {
+      const std::string instanceId = dynamic_cast<Orthanc::SingleValueObject<std::string>&>(*instance).GetValue();
+      const std::string uri = GetCacheUri(instanceId);
+
+      Json::Value instanceTags;
+      std::string metadata;
+      if (!OrthancPlugins::RestApiGetString(metadata, uri, false) &&
+          EncodeOhifInstance(instanceTags, instanceId))
+      {
+        CacheAsMetadata(instanceTags, instanceId);
+      }
+    }
+  }
+}
+
+
 OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
                                         OrthancPluginResourceType resourceType,
                                         const char* resourceId)
 {
   try
   {
-    if (changeType == OrthancPluginChangeType_OrthancStarted)
+    switch (changeType)
     {
-      if (useDicomWeb_)
+      case OrthancPluginChangeType_OrthancStarted:
       {
-        Json::Value info;
-        if (!OrthancPlugins::RestApiGet(info, "/plugins/dicom-web", false))
+        continueThread_ = true;
+
+        if (useDicomWeb_)
         {
-          throw Orthanc::OrthancException(
-            Orthanc::ErrorCode_InternalError,
-            "The OHIF plugin requires the DICOMweb plugin to be installed");
+          Json::Value info;
+          if (!OrthancPlugins::RestApiGet(info, "/plugins/dicom-web", false))
+          {
+            throw Orthanc::OrthancException(
+              Orthanc::ErrorCode_InternalError,
+              "The OHIF plugin requires the DICOMweb plugin to be installed");
+          }
+
+          if (info.type() != Json::objectValue ||
+              !info.isMember("ID") ||
+              !info.isMember("Version") ||
+              info["ID"].type() != Json::stringValue ||
+              info["Version"].type() != Json::stringValue ||
+              info["ID"].asString() != "dicom-web")
+          {
+            throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError,
+                                            "The DICOMweb plugin is required by OHIF, but is not properly installed");
+          }
+        }
+        else
+        {
+          metadataThread_ = boost::thread(MetadataThread);
+        }
+        break;
+      }
+
+      case OrthancPluginChangeType_OrthancStopped:
+      {
+        continueThread_ = false;
+
+        if (metadataThread_.joinable())
+        {
+          metadataThread_.join();
+        }
+        break;
+      }
+
+      case OrthancPluginChangeType_NewInstance:
+      {
+        if (metadataThread_.joinable() &&
+            pendingInstances_.GetSize() < MAX_INSTANCES_IN_QUEUE)
+        {
+          pendingInstances_.Enqueue(new Orthanc::SingleValueObject<std::string>(resourceId));
         }
 
-        if (info.type() != Json::objectValue ||
-            !info.isMember("ID") ||
-            !info.isMember("Version") ||
-            info["ID"].type() != Json::stringValue ||
-            info["Version"].type() != Json::stringValue ||
-            info["ID"].asString() != "dicom-web")
-        {
-          throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError,
-                                          "The DICOMweb plugin is required by OHIF, but is not properly installed");
-        }
+        break;
       }
+
+      default:
+        break;
     }
   }
   catch (Orthanc::OrthancException& e)
