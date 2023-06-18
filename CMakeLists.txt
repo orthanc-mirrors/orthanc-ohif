@@ -32,6 +32,8 @@ else()
   set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "web")
 endif()
 
+set(METADATA_VERSION 1)
+
 
 #####################################################################
 ## Parameters of the build
@@ -109,6 +111,7 @@ add_definitions(
   -DORTHANC_ENABLE_LOGGING_PLUGIN=1
   -DORTHANC_FRAMEWORK_BUILDING_PLUGIN=1
   -DORTHANC_OHIF_VERSION="${ORTHANC_OHIF_VERSION}"
+  -DMETADATA_VERSION=${METADATA_VERSION}
   )
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR

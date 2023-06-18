@@ -70,7 +70,7 @@ $('#study').live('pagebeforeshow', function() {
           if (${USE_DICOM_WEB}) {
             window.open('../ohif/viewer?StudyInstanceUIDs=' + studyInstanceUid);
           } else  {
-            window.open('../ohif/viewer?url=../ohif-source/' + studyId);
+            window.open('../ohif/viewer?url=../studies/' + studyId + '/ohif-dicom-json');
           }
         });
 
@@ -78,7 +78,7 @@ $('#study').live('pagebeforeshow', function() {
           if (${USE_DICOM_WEB}) {
             window.open('../ohif/viewer?hangingprotocolId=mprAnd3DVolumeViewport&StudyInstanceUIDs=' + studyInstanceUid);
           } else  {
-            window.open('../ohif/viewer?hangingprotocolId=mprAnd3DVolumeViewport&url=../ohif-source/' + studyId);
+            window.open('../ohif/viewer?hangingprotocolId=mprAnd3DVolumeViewport&url=../studies/' + studyId + '/ohif-dicom-json');
           }
         });
 
@@ -86,7 +86,7 @@ $('#study').live('pagebeforeshow', function() {
           if (${USE_DICOM_WEB}) {
             window.open('../ohif/tmtv?StudyInstanceUIDs=' + studyInstanceUid);
           } else  {
-            window.open('../ohif/tmtv?url=../ohif-source/' + studyId);
+            window.open('../ohif/tmtv?url=../studies/' + studyId + '/ohif-dicom-json');
           }
         });
 

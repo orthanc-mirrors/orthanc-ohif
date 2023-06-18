@@ -37,6 +37,10 @@
 #include <boost/thread/shared_mutex.hpp>
 
 
+static const std::string METADATA_OHIF = "4202";
+static const char* const KEY_VERSION = "Version";
+
+
 // Reference: https://v3-docs.ohif.org/configuration/dataSources/dicom-json
 
 enum DataType
@@ -350,57 +354,131 @@ static bool ParseTagFromOrthanc(Json::Value& target,
 }
 
 
-static bool GetOhifDicomTags(Json::Value& target,
-                             const std::string& instanceId)
+static bool EncodeOhifInstance(Json::Value& target,
+                               const std::string& instanceId)
 {
   Json::Value source;
   if (!OrthancPlugins::RestApiGet(source, "/instances/" + instanceId + "/tags?short", false))
   {
     return false;
   }
-
-  if (source.type() != Json::objectValue)
+  else if (source.type() != Json::objectValue)
   {
     throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError);
   }
-
-  for (TagsDictionary::const_iterator it = allTags_.begin(); it != allTags_.end(); ++it)
+  else
   {
-    ParseTagFromOrthanc(target, it->first, it->first.Format(), it->second.GetType(), source);
-  }
-
-  /**
-   * This is a sequence for PET scans that is manually injected, to be
-   * used in function "getPTImageIdInstanceMetadata()" of
-   * "extensions/default/src/getPTImageIdInstanceMetadata.ts"
-   **/
-  static const Orthanc::DicomTag RADIONUCLIDE_HALF_LIFE(0x0018, 0x1075);
-  static const Orthanc::DicomTag RADIONUCLIDE_TOTAL_DOSE(0x0018, 0x1074);
-  static const Orthanc::DicomTag RADIOPHARMACEUTICAL_START_DATETIME(0x0018, 0x1078);
-  static const Orthanc::DicomTag RADIOPHARMACEUTICAL_START_TIME(0x0018, 0x1072);
-
-  if (source.isMember(RADIOPHARMACEUTICAL_INFORMATION_SEQUENCE.Format()))
-  {
-    const Json::Value& pharma = source[RADIOPHARMACEUTICAL_INFORMATION_SEQUENCE.Format()];
-    if (pharma.type() == Json::arrayValue &&
-        pharma.size() > 0 &&
-        pharma[0].type() == Json::objectValue)
+    target[KEY_VERSION] = static_cast<int>(METADATA_VERSION);
+    
+    for (TagsDictionary::const_iterator it = allTags_.begin(); it != allTags_.end(); ++it)
     {
-      Json::Value info;
-      if (ParseTagFromOrthanc(info, RADIONUCLIDE_HALF_LIFE, "RadionuclideHalfLife", DataType_Float, pharma[0]) &&
-          ParseTagFromOrthanc(info, RADIONUCLIDE_TOTAL_DOSE, "RadionuclideTotalDose", DataType_Float, pharma[0]) &&
-          (ParseTagFromOrthanc(info, RADIOPHARMACEUTICAL_START_DATETIME, "RadiopharmaceuticalStartDateTime", DataType_String, pharma[0]) ||
-           ParseTagFromOrthanc(info, RADIOPHARMACEUTICAL_START_TIME, "RadiopharmaceuticalStartTime", DataType_String, pharma[0])))
+      ParseTagFromOrthanc(target, it->first, it->first.Format(), it->second.GetType(), source);
+    }
+
+    /**
+     * This is a sequence for PET scans that is manually injected, to be
+     * used in function "getPTImageIdInstanceMetadata()" of
+     * "extensions/default/src/getPTImageIdInstanceMetadata.ts"
+     **/
+    static const Orthanc::DicomTag RADIONUCLIDE_HALF_LIFE(0x0018, 0x1075);
+    static const Orthanc::DicomTag RADIONUCLIDE_TOTAL_DOSE(0x0018, 0x1074);
+    static const Orthanc::DicomTag RADIOPHARMACEUTICAL_START_DATETIME(0x0018, 0x1078);
+    static const Orthanc::DicomTag RADIOPHARMACEUTICAL_START_TIME(0x0018, 0x1072);
+
+    if (source.isMember(RADIOPHARMACEUTICAL_INFORMATION_SEQUENCE.Format()))
+    {
+      const Json::Value& pharma = source[RADIOPHARMACEUTICAL_INFORMATION_SEQUENCE.Format()];
+      if (pharma.type() == Json::arrayValue &&
+          pharma.size() > 0 &&
+          pharma[0].type() == Json::objectValue)
       {
-        Json::Value sequence = Json::arrayValue;
-        sequence.append(info);
+        Json::Value info;
+        if (ParseTagFromOrthanc(info, RADIONUCLIDE_HALF_LIFE, "RadionuclideHalfLife", DataType_Float, pharma[0]) &&
+            ParseTagFromOrthanc(info, RADIONUCLIDE_TOTAL_DOSE, "RadionuclideTotalDose", DataType_Float, pharma[0]) &&
+            (ParseTagFromOrthanc(info, RADIOPHARMACEUTICAL_START_DATETIME, "RadiopharmaceuticalStartDateTime", DataType_String, pharma[0]) ||
+             ParseTagFromOrthanc(info, RADIOPHARMACEUTICAL_START_TIME, "RadiopharmaceuticalStartTime", DataType_String, pharma[0])))
+        {
+          Json::Value sequence = Json::arrayValue;
+          sequence.append(info);
         
-        target[RADIOPHARMACEUTICAL_INFORMATION_SEQUENCE.Format()] = sequence;
+          target[RADIOPHARMACEUTICAL_INFORMATION_SEQUENCE.Format()] = sequence;
+        }
       }
     }
+
+    return true;
+  }
+}
+
+
+static std::string GetCacheUri(const std::string& instanceId)
+{
+  return "/instances/" + instanceId + "/metadata/" + METADATA_OHIF;
+}
+
+
+static void CacheAsMetadata(const Json::Value& instanceTags,
+                            const std::string& instanceId)
+{
+  std::string uncompressed;
+  Orthanc::Toolbox::WriteFastJson(uncompressed, instanceTags);
+
+  std::string compressed;
+  Orthanc::GzipCompressor compressor;
+  Orthanc::IBufferCompressor::Compress(compressed, compressor, uncompressed);
+
+  std::string metadata;
+  Orthanc::Toolbox::EncodeBase64(metadata, compressed);
+
+  Json::Value answer;
+  OrthancPlugins::RestApiPut(answer, GetCacheUri(instanceId), metadata.c_str(), metadata.size(), false);
+}
+
+
+static bool GetOhifInstance(Json::Value& target,
+                            const std::string& instanceId)
+{
+  const std::string uri = GetCacheUri(instanceId);
+  
+  std::string metadata;
+  
+  if (OrthancPlugins::RestApiGetString(metadata, uri, false))
+  {
+    try
+    {
+      std::string compressed;
+      Orthanc::Toolbox::DecodeBase64(compressed, metadata);
+
+      std::string uncompressed;
+      Orthanc::GzipCompressor compressor;
+      Orthanc::IBufferCompressor::Uncompress(uncompressed, compressor, compressed);
+
+      if (Orthanc::Toolbox::ReadJson(target, uncompressed) &&
+          target.isMember(KEY_VERSION) &&
+          target[KEY_VERSION].type() == Json::intValue &&
+          target[KEY_VERSION].asInt() == METADATA_VERSION)
+      {
+        // Success, we can reuse the cached value
+        return true;
+      }
+    }
+    catch (Orthanc::OrthancException&)
+    {
+    }
+
+    // Remove corrupted or metadata with an earlier version
+    OrthancPlugins::RestApiDelete(uri, false);
   }
 
-  return true;
+  if (EncodeOhifInstance(target, instanceId))
+  {
+    CacheAsMetadata(target, instanceId);
+    return true;
+  }
+  else
+  {
+    return false;
+  }
 }
 
 
@@ -490,7 +568,7 @@ static void GenerateOhifStudy(Json::Value& target,
     }
 
     Json::Value t;
-    if (GetOhifDicomTags(t, instancesIds[i][KEY_ID].asString()))
+    if (GetOhifInstance(t, instancesIds[i][KEY_ID].asString()))
     {
       instancesTags.push_back(t);
     }
@@ -717,7 +795,7 @@ extern "C"
 
     OrthancPlugins::RegisterRestCallback<ServeFile>("/ohif", true);
     OrthancPlugins::RegisterRestCallback<ServeFile>("/ohif/(.*)", true);
-    OrthancPlugins::RegisterRestCallback<GetOhifStudy>("/ohif-source/(.*)", true);
+    OrthancPlugins::RegisterRestCallback<GetOhifStudy>("/studies/([0-9a-f-]+)/ohif-dicom-json", true);
 
     OrthancPluginRegisterOnChangeCallback(context, OnChangeCallback);
 
