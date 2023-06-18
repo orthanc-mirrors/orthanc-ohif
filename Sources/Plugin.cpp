@@ -89,6 +89,9 @@ typedef std::map<Orthanc::DicomTag, TagInformation>  TagsDictionary;
 
 static TagsDictionary ohifStudyTags_, ohifSeriesTags_, ohifInstanceTags_, allTags_;
 
+
+static const Orthanc::DicomTag RADIOPHARMACEUTICAL_INFORMATION_SEQUENCE(0x0054, 0x0016);
+
 static void InitializeOhifTags()
 {
   /**
@@ -140,11 +143,22 @@ static void InitializeOhifTags()
    * by looking for "required metadata are missing" in
    * "extensions/default/src/getPTImageIdInstanceMetadata.ts"
    **/
-  ohifInstanceTags_[Orthanc::DICOM_TAG_SERIES_TIME]    = TagInformation(DataType_String, "SeriesTime");
-  ohifInstanceTags_[Orthanc::DicomTag(0x0010, 0x1030)] = TagInformation(DataType_Float, "PatientWeight");
-  ohifInstanceTags_[Orthanc::DicomTag(0x0028, 0x0051)] = TagInformation(DataType_ListOfStrings, "CorrectedImage");
-  ohifInstanceTags_[Orthanc::DicomTag(0x0054, 0x1001)] = TagInformation(DataType_String, "Units");
-  ohifInstanceTags_[Orthanc::DicomTag(0x0054, 0x1102)] = TagInformation(DataType_String, "DecayCorrection");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_ACQUISITION_DATE]      = TagInformation(DataType_String, "AcquisitionDate");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_ACQUISITION_TIME]      = TagInformation(DataType_String, "AcquisitionTime");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_SERIES_TIME]           = TagInformation(DataType_String, "SeriesTime");
+  ohifInstanceTags_[Orthanc::DicomTag(0x0010, 0x1020)]        = TagInformation(DataType_Float, "PatientSize");
+  ohifInstanceTags_[Orthanc::DicomTag(0x0010, 0x1030)]        = TagInformation(DataType_Float, "PatientWeight");
+  ohifInstanceTags_[Orthanc::DicomTag(0x0018, 0x1242)]        = TagInformation(DataType_Integer, "ActualFrameDuration");
+  ohifInstanceTags_[Orthanc::DicomTag(0x0028, 0x0051)]        = TagInformation(DataType_ListOfStrings, "CorrectedImage");
+  ohifInstanceTags_[Orthanc::DicomTag(0x0054, 0x1001)]        = TagInformation(DataType_String, "Units");
+  ohifInstanceTags_[Orthanc::DicomTag(0x0054, 0x1102)]        = TagInformation(DataType_String, "DecayCorrection");
+  ohifInstanceTags_[Orthanc::DicomTag(0x0054, 0x1300)]        = TagInformation(DataType_Float, "FrameReferenceTime");
+  ohifInstanceTags_[RADIOPHARMACEUTICAL_INFORMATION_SEQUENCE] = TagInformation(DataType_None, "RadiopharmaceuticalInformationSequence");
+
+  // UNTESTED
+  ohifInstanceTags_[Orthanc::DicomTag(0x7053, 0x1000)] = TagInformation(DataType_Float, "70531000");  // Philips SUVScaleFactor
+  ohifInstanceTags_[Orthanc::DicomTag(0x7053, 0x1009)] = TagInformation(DataType_Float, "70531009");  // Philips ActivityConcentrationScaleFactor
+  ohifInstanceTags_[Orthanc::DicomTag(0x0009, 0x100d)] = TagInformation(DataType_String, "0009100d");  // GE PrivatePostInjectionDateTime
 
   for (TagsDictionary::const_iterator it = ohifStudyTags_.begin(); it != ohifStudyTags_.end(); ++it)
   {
@@ -236,6 +250,106 @@ public:
 };
 
 
+static bool ParseTagFromOrthanc(Json::Value& target,
+                                const Orthanc::DicomTag& tag,
+                                const std::string& name,
+                                DataType type,
+                                const Json::Value& source)
+{
+  const std::string formattedTag = tag.Format();
+
+  if (source.isMember(formattedTag))
+  {
+    const Json::Value& value = source[formattedTag];
+
+    /**
+     * The cases below derive from "Toolbox::SimplifyDicomAsJson()"
+     * with "DicomToJsonFormat_Short", which is invoked by the REST
+     * API call to "/instances/.../tags?short".
+     **/
+
+    switch (value.type())
+    {
+      case Json::nullValue:
+        return false;
+          
+      case Json::arrayValue:
+        // This should never happen, as this would correspond to a sequence
+        return false;
+
+      case Json::stringValue:
+      {
+        switch (type)
+        {
+          case DataType_String:
+            target[name] = value;
+            return true;
+
+          case DataType_Integer:
+          {
+            int32_t v;
+            if (Orthanc::SerializationToolbox::ParseInteger32(v, value.asString()))
+            {
+              target[name] = v;
+            }
+            return true;
+          }
+
+          case DataType_Float:
+          {
+            float v;
+            if (Orthanc::SerializationToolbox::ParseFloat(v, value.asString()))
+            {
+              target[name] = v;
+            }
+            return true;
+          }
+
+          case DataType_ListOfStrings:
+          {
+            std::vector<std::string> tokens;
+            Orthanc::Toolbox::TokenizeString(tokens, value.asString(), '\\');
+            target[name] = Json::arrayValue;
+            for (size_t i = 0; i < tokens.size(); i++)
+            {
+              target[name].append(tokens[i]);
+            }
+            return true;
+          }
+
+          case DataType_ListOfFloats:
+          {
+            std::vector<std::string> tokens;
+            Orthanc::Toolbox::TokenizeString(tokens, value.asString(), '\\');
+            target[name] = Json::arrayValue;
+            for (size_t i = 0; i < tokens.size(); i++)
+            {
+              float v;
+              if (Orthanc::SerializationToolbox::ParseFloat(v, tokens[i]))
+              {
+                target[name].append(v);
+              }
+            }
+            return true;
+          }
+
+          default:
+            throw Orthanc::OrthancException(Orthanc::ErrorCode_NotImplemented);
+        }
+      }
+
+      default:
+        // This should never happen
+        return false;
+    }
+  }
+  else
+  {
+    return false;
+  }
+}
+
+
 static bool GetOhifDicomTags(Json::Value& target,
                              const std::string& instanceId)
 {
@@ -252,91 +366,36 @@ static bool GetOhifDicomTags(Json::Value& target,
 
   for (TagsDictionary::const_iterator it = allTags_.begin(); it != allTags_.end(); ++it)
   {
-    const std::string tag = it->first.Format();
-    
-    if (source.isMember(tag))
+    ParseTagFromOrthanc(target, it->first, it->first.Format(), it->second.GetType(), source);
+  }
+
+  /**
+   * This is a sequence for PET scans that is manually injected, to be
+   * used in function "getPTImageIdInstanceMetadata()" of
+   * "extensions/default/src/getPTImageIdInstanceMetadata.ts"
+   **/
+  static const Orthanc::DicomTag RADIONUCLIDE_HALF_LIFE(0x0018, 0x1075);
+  static const Orthanc::DicomTag RADIONUCLIDE_TOTAL_DOSE(0x0018, 0x1074);
+  static const Orthanc::DicomTag RADIOPHARMACEUTICAL_START_DATETIME(0x0018, 0x1078);
+  static const Orthanc::DicomTag RADIOPHARMACEUTICAL_START_TIME(0x0018, 0x1072);
+
+  if (source.isMember(RADIOPHARMACEUTICAL_INFORMATION_SEQUENCE.Format()))
+  {
+    const Json::Value& pharma = source[RADIOPHARMACEUTICAL_INFORMATION_SEQUENCE.Format()];
+    if (pharma.type() == Json::arrayValue &&
+        pharma.size() > 0 &&
+        pharma[0].type() == Json::objectValue)
     {
-      const Json::Value& value = source[tag];
-
-      /**
-       * The cases below derive from "Toolbox::SimplifyDicomAsJson()"
-       * with "DicomToJsonFormat_Short", which is invoked by the REST
-       * API call to "/instances/.../tags?short".
-       **/
-
-      switch (value.type())
+      Json::Value info;
+      if (ParseTagFromOrthanc(info, RADIONUCLIDE_HALF_LIFE, "RadionuclideHalfLife", DataType_Float, pharma[0]) &&
+          ParseTagFromOrthanc(info, RADIONUCLIDE_TOTAL_DOSE, "RadionuclideTotalDose", DataType_Float, pharma[0]) &&
+          (ParseTagFromOrthanc(info, RADIOPHARMACEUTICAL_START_DATETIME, "RadiopharmaceuticalStartDateTime", DataType_String, pharma[0]) ||
+           ParseTagFromOrthanc(info, RADIOPHARMACEUTICAL_START_TIME, "RadiopharmaceuticalStartTime", DataType_String, pharma[0])))
       {
-        case Json::nullValue:
-          break;
-          
-        case Json::arrayValue:
-          // This should never happen, as this would correspond to a sequence
-          break;
-
-        case Json::stringValue:
-        {
-          switch (it->second.GetType())
-          {
-            case DataType_String:
-              target[tag] = value;
-              break;
-
-            case DataType_Integer:
-            {
-              int32_t v;
-              if (Orthanc::SerializationToolbox::ParseInteger32(v, value.asString()))
-              {
-                target[tag] = v;
-              }
-              break;
-            }
-
-            case DataType_Float:
-            {
-              float v;
-              if (Orthanc::SerializationToolbox::ParseFloat(v, value.asString()))
-              {
-                target[tag] = v;
-              }
-              break;
-            }
-
-            case DataType_ListOfStrings:
-            {
-              std::vector<std::string> tokens;
-              Orthanc::Toolbox::TokenizeString(tokens, value.asString(), '\\');
-              target[tag] = Json::arrayValue;
-              for (size_t i = 0; i < tokens.size(); i++)
-              {
-                target[tag].append(tokens[i]);
-              }
-              break;
-            }
-
-            case DataType_ListOfFloats:
-            {
-              std::vector<std::string> tokens;
-              Orthanc::Toolbox::TokenizeString(tokens, value.asString(), '\\');
-              target[tag] = Json::arrayValue;
-              for (size_t i = 0; i < tokens.size(); i++)
-              {
-                float v;
-                if (Orthanc::SerializationToolbox::ParseFloat(v, tokens[i]))
-                {
-                  target[tag].append(v);
-                }
-              }
-              break;
-            }
-
-            default:
-              throw Orthanc::OrthancException(Orthanc::ErrorCode_NotImplemented);
-          }
-        }
-
-        default:
-          // This should never happen
-          break;
+        Json::Value sequence = Json::arrayValue;
+        sequence.append(info);
+        
+        target[RADIOPHARMACEUTICAL_INFORMATION_SEQUENCE.Format()] = sequence;
       }
     }
   }
