@@ -493,6 +493,7 @@ static bool GetOhifInstance(Json::Value& target,
 
 
 static ResourcesCache               cache_;
+static std::string                  userConfiguration_;
 static std::string                  routerBasename_;
 static DataSource                   dataSource_;
 static bool                         preload_;
@@ -520,17 +521,16 @@ void ServeFile(OrthancPluginRestOutput* output,
 
   if (uri == "app-config.js")
   {
-    std::string system, user;
+    std::string system;
     Orthanc::EmbeddedResources::GetFileResource(system, Orthanc::EmbeddedResources::APP_CONFIG_SYSTEM);
-    Orthanc::EmbeddedResources::GetFileResource(user, Orthanc::EmbeddedResources::APP_CONFIG_USER);
-    
+
     std::map<std::string, std::string> dictionary;
     dictionary["ROUTER_BASENAME"] = routerBasename_;
     dictionary["USE_DICOM_WEB"] = (dataSource_ == DataSource_DicomWeb ? "true" : "false");
 
     system = Orthanc::Toolbox::SubstituteVariables(system, dictionary);
 
-    std::string s = (user + "\n" + system);
+    std::string s = (userConfiguration_ + "\n" + system);
     OrthancPluginAnswerBuffer(context, output, s.c_str(), s.size(), "application/json");
   }
   else if (uri == "" ||      // Study list
@@ -874,8 +874,9 @@ extern "C"
         globalConfiguration.GetSection(configuration, "OHIF");
       }
 
-      routerBasename_ = configuration.GetStringValue("RouterBasename", "/ohif");
+      routerBasename_ = configuration.GetStringValue("RouterBasename", "/ohif/");
       std::string s = configuration.GetStringValue("DataSource", "dicom-json");
+      std::string userConfigurationPath = configuration.GetStringValue("Configuration", "");
       preload_ = configuration.GetBooleanValue("Preload", true);
 
       if (s == "dicom-web")
@@ -891,6 +892,15 @@ extern "C"
         throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
                                         "Configuration option \"OHIF.DataSource\" must be either "
                                         "\"dicomweb\" or \"dicom-json\", but found: " + s);
+      }
+
+      if (userConfigurationPath.empty())
+      {
+        Orthanc::EmbeddedResources::GetFileResource(userConfiguration_, Orthanc::EmbeddedResources::APP_CONFIG_USER);
+      }
+      else
+      {
+        Orthanc::SystemToolbox::ReadFile(userConfiguration_, userConfigurationPath);
       }
 
       // Make sure that the router basename ends with a trailing slash
