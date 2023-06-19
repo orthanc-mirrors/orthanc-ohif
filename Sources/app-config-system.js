@@ -38,7 +38,7 @@ if (${USE_DICOM_WEB}) {
   window.config.showStudyList = false;
   window.config.dataSources = [
     {
-      friendlyName: 'Orthanc JSON',
+      friendlyName: 'Orthanc DICOM JSON',
       namespace: '@ohif/extension-default.dataSourcesModule.dicomjson',
       sourceName: 'dicomjson',
       configuration: {
