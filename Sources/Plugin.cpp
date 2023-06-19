@@ -876,7 +876,7 @@ extern "C"
 
       routerBasename_ = configuration.GetStringValue("RouterBasename", "/ohif/");
       std::string s = configuration.GetStringValue("DataSource", "dicom-json");
-      std::string userConfigurationPath = configuration.GetStringValue("Configuration", "");
+      std::string userConfigurationPath = configuration.GetStringValue("UserConfiguration", "");
       preload_ = configuration.GetBooleanValue("Preload", true);
 
       if (s == "dicom-web")
