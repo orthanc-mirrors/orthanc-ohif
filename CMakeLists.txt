@@ -196,6 +196,8 @@ set_target_properties(OrthancOHIF PROPERTIES
   VERSION ${ORTHANC_OHIF_VERSION} 
   SOVERSION ${ORTHANC_OHIF_VERSION})
 
+DefineSourceBasenameForTarget(OrthancOHIF)
+
 install(
   TARGETS OrthancOHIF
   RUNTIME DESTINATION lib    # Destination for Windows
