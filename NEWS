@@ -1,6 +1,9 @@
 Pending changes in the mainline
 ===============================
 
+* Updated OHIF to 3.7.0
+* The default configuration has been adapted to avoid unneccesary transcoding 
+  on Orthanc side.
 * Patch to make the build of static assets reproducible, following a
   suggestion by Bernhard M. Wiedemann (bwiedemann@suse.de)
 

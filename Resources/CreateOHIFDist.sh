@@ -28,7 +28,7 @@
 set -ex
 
 if [ "$1" = "" ]; then
-    PACKAGE=Viewers-3.6.0
+    PACKAGE=Viewers-3.7.0
 else
     PACKAGE=$1
 fi
@@ -51,7 +51,8 @@ fi
 if [ ! -f "${ROOT_DIR}/OHIF/${PACKAGE}.tar.gz" ]; then
     mkdir -p "${ROOT_DIR}/OHIF"
     ( cd ${ROOT_DIR}/OHIF && \
-          wget https://orthanc.uclouvain.be/third-party-downloads/OHIF/${PACKAGE}.tar.gz )
+          wget https://github.com/OHIF/Viewers/archive/refs/tags/v3.7.0.tar.gz --output-document Viewers-3.7.0.tar.gz )
+          # wget https://orthanc.uclouvain.be/third-party-downloads/OHIF/${PACKAGE}.tar.gz )
 fi
 
 mkdir -p ${ROOT_DIR}/OHIF/dist/

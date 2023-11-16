@@ -27,7 +27,8 @@ if (${USE_DICOM_WEB}) {
         supportsFuzzyMatching: false,
         supportsWildcard: true,
         staticWado: true,
-        singlepart: 'bulkdata'
+        singlepart: 'bulkdata,pdf,video',
+        acceptHeader: [ 'multipart/related; type=application/octet-stream; transfer-syntax=*']
       }
     }
   ];
