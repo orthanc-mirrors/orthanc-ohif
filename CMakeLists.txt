@@ -28,7 +28,7 @@ if (ORTHANC_OHIF_VERSION STREQUAL "mainline")
   set(ORTHANC_FRAMEWORK_DEFAULT_VERSION "mainline")
   set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "hg")
 else()
-  set(ORTHANC_FRAMEWORK_DEFAULT_VERSION "1.12.0")
+  set(ORTHANC_FRAMEWORK_DEFAULT_VERSION "1.12.1")
   set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "web")
 endif()
 
@@ -196,7 +196,9 @@ set_target_properties(OrthancOHIF PROPERTIES
   VERSION ${ORTHANC_OHIF_VERSION} 
   SOVERSION ${ORTHANC_OHIF_VERSION})
 
-DefineSourceBasenameForTarget(OrthancOHIF)
+if (DEFINED DefineSourceBasenameForTarget)
+  DefineSourceBasenameForTarget(OrthancOHIF)
+endif()
 
 install(
   TARGETS OrthancOHIF
