@@ -196,7 +196,7 @@ set_target_properties(OrthancOHIF PROPERTIES
   VERSION ${ORTHANC_OHIF_VERSION} 
   SOVERSION ${ORTHANC_OHIF_VERSION})
 
-if (DEFINED DefineSourceBasenameForTarget)
+if (COMMAND DefineSourceBasenameForTarget)
   DefineSourceBasenameForTarget(OrthancOHIF)
 endif()
 
