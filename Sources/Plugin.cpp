@@ -531,7 +531,7 @@ void ServeFile(OrthancPluginRestOutput* output,
     system = Orthanc::Toolbox::SubstituteVariables(system, dictionary);
 
     std::string s = (userConfiguration_ + "\n" + system);
-    OrthancPluginAnswerBuffer(context, output, s.c_str(), s.size(), "application/json");
+    OrthancPluginAnswerBuffer(context, output, s.c_str(), s.size(), "text/javascript");
   }
   else if (uri == "" ||      // Study list
            uri == "tmtv" ||  // Total metabolic tumor volume
