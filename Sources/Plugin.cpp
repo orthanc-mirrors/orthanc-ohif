@@ -249,6 +249,13 @@ public:
 
     std::unique_ptr<std::string> item(new std::string);
     ReadStaticAsset(*item, path);
+
+    // patch OHIF for https://github.com/OHIF/Viewers/issues/3928
+    if (Orthanc::Toolbox::StartsWith(path, "app.bundle."))
+    {
+      boost::replace_all(*item, "window.location.origin + location.pathname + location.search", "window.location.origin + window.location.pathname + location.search");
+    }
+
     OrthancPluginAnswerBuffer(context, output, item->c_str(), item->size(), mime.c_str());
 
     {

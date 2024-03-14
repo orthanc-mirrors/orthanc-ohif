@@ -1,6 +1,9 @@
 Pending changes in the mainline
 ===============================
 
+* Patching OHIF code for https://github.com/OHIF/Viewers/issues/3928
+  to allow using token args in url.
+
 
 Version 1.2 (2024-01-04)
 ========================
