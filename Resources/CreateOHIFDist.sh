@@ -28,7 +28,7 @@
 set -ex
 
 if [ "$1" = "" ]; then
-    PACKAGE=Viewers-3.8.0-beta.60.tar.gz
+    PACKAGE=Viewers-3.8.0-beta.60
 else
     PACKAGE=$1
 fi
