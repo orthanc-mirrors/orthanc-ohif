@@ -90,6 +90,22 @@ $('#study').live('pagebeforeshow', function() {
           }
         });
 
+        AddOhifViewer(viewers, 'Segmentation', function() {
+          if (${USE_DICOM_WEB}) {
+            window.open('../ohif/segmentation?StudyInstanceUIDs=' + studyInstanceUid);
+          } else  {
+            window.open('../ohif/segmentation?url=../studies/' + studyId + '/ohif-dicom-json');
+          }
+        });
+
+        AddOhifViewer(viewers, 'Microscopy', function() {
+          if (${USE_DICOM_WEB}) {
+            window.open('../ohif/microscopy?StudyInstanceUIDs=' + studyInstanceUid);
+          } else  {
+            window.open('../ohif/microscopy?url=../studies/' + studyId + '/ohif-dicom-json');
+          }
+        });
+
         // Launch the dialog
         $('#dialog').simpledialog2({
           mode: 'blank',

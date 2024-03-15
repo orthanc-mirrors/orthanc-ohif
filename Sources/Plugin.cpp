@@ -540,9 +540,12 @@ void ServeFile(OrthancPluginRestOutput* output,
     std::string s = (userConfiguration_ + "\n" + system);
     OrthancPluginAnswerBuffer(context, output, s.c_str(), s.size(), "text/javascript");
   }
-  else if (uri == "" ||      // Study list
-           uri == "tmtv" ||  // Total metabolic tumor volume
-           uri == "viewer")  // Default viewer (including MPR)
+  else if (uri == "" ||             // Study list
+           uri == "tmtv" ||         // Total metabolic tumor volume
+           uri == "viewer" ||       // Default viewer (including MPR)
+           uri == "segmentation" || // Segmentation mode
+           uri == "microscopy"      // Microscopy mode
+           )  
   {
     // Those correspond to the different modes of the OHIF platform:
     // https://v3-docs.ohif.org/platform/modes/
