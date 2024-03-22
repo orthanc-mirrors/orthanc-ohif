@@ -940,7 +940,7 @@ extern "C"
         dictionary["USE_DICOM_WEB"] = (dataSource_ == DataSource_DicomWeb ? "true" : "false");
         explorer = Orthanc::Toolbox::SubstituteVariables(explorer, dictionary);
       
-        OrthancPlugins::ExtendOrthancExplorer(ORTHANC_PLUGIN_NAME, explorer.c_str());
+        OrthancPlugins::ExtendOrthancExplorer(ORTHANC_PLUGIN_NAME, explorer);
       }
     }
     catch (Orthanc::OrthancException& e)
