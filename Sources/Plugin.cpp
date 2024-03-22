@@ -38,6 +38,8 @@
 #include <boost/thread.hpp>
 #include <boost/thread/shared_mutex.hpp>
 
+#define ORTHANC_PLUGIN_NAME  "ohif"
+
 
 static const std::string  METADATA_OHIF = "4202";
 static const char* const  KEY_VERSION = "Version";
@@ -921,7 +923,7 @@ extern "C"
         routerBasename_ += "/";
       }
 
-      OrthancPluginSetDescription(context, "OHIF plugin for Orthanc.");
+      OrthancPlugins::SetDescription(ORTHANC_PLUGIN_NAME, "OHIF plugin for Orthanc.");
 
       OrthancPlugins::RegisterRestCallback<ServeFile>("/ohif", true);
       OrthancPlugins::RegisterRestCallback<ServeFile>("/ohif/(.*)", true);
@@ -938,7 +940,7 @@ extern "C"
         dictionary["USE_DICOM_WEB"] = (dataSource_ == DataSource_DicomWeb ? "true" : "false");
         explorer = Orthanc::Toolbox::SubstituteVariables(explorer, dictionary);
       
-        OrthancPluginExtendOrthancExplorer(context, explorer.c_str());
+        OrthancPlugins::ExtendOrthancExplorer(ORTHANC_PLUGIN_NAME, explorer.c_str());
       }
     }
     catch (Orthanc::OrthancException& e)
@@ -957,7 +959,7 @@ extern "C"
 
   ORTHANC_PLUGINS_API const char* OrthancPluginGetName()
   {
-    return "ohif";
+    return ORTHANC_PLUGIN_NAME;
   }
 
 
