@@ -251,6 +251,7 @@ public:
     ReadStaticAsset(*item, path);
 
     // patch OHIF for https://github.com/OHIF/Viewers/issues/3928
+    // TODO - Remove after official release OHIF 3.8.0
     if (Orthanc::Toolbox::StartsWith(path, "app.bundle."))
     {
       boost::replace_all(*item, "window.location.origin + location.pathname + location.search", "window.location.origin + window.location.pathname + location.search");
