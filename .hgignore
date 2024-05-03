@@ -8,3 +8,4 @@ OHIF/Viewers-*.tar.gz
 OHIF/dist
 i/
 .vscode/
+*.orig
