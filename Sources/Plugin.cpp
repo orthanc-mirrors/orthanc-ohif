@@ -27,6 +27,7 @@
 #include <Compression/GzipCompressor.h>
 #include <DicomFormat/DicomInstanceHasher.h>
 #include <DicomFormat/DicomMap.h>
+#include <Logging.h>
 #include <MultiThreading/SharedMessageQueue.h>
 #include <SerializationToolbox.h>
 #include <SystemToolbox.h>
@@ -113,6 +114,12 @@ static void InitializeOhifTags()
    * Those are the tags that are found in the documentation of the
    * "DICOM JSON" data source:
    * https://docs.ohif.org/configuration/dataSources/dicom-json
+   *
+   * Official list of tags:
+   * https://github.com/OHIF/Viewers/blob/master/platform/docs/docs/faq.md#what-are-the-list-of-required-metadata-for-the-ohif-viewer-to-work
+   *
+   * Official example:
+   * https://ohif-dicom-json-example.s3.amazonaws.com/LIDC-IDRI-0001.json
    **/
   ohifStudyTags_[Orthanc::DICOM_TAG_STUDY_INSTANCE_UID] = TagInformation(DataType_String, "StudyInstanceUID");
   ohifStudyTags_[Orthanc::DICOM_TAG_STUDY_DATE]         = TagInformation(DataType_String, "StudyDate");
@@ -169,6 +176,14 @@ static void InitializeOhifTags()
   ohifInstanceTags_[Orthanc::DicomTag(0x0054, 0x1102)]        = TagInformation(DataType_String, "DecayCorrection");
   ohifInstanceTags_[Orthanc::DicomTag(0x0054, 0x1300)]        = TagInformation(DataType_Float, "FrameReferenceTime");
   ohifInstanceTags_[RADIOPHARMACEUTICAL_INFORMATION_SEQUENCE] = TagInformation(DataType_None, "RadiopharmaceuticalInformationSequence");
+
+  /**
+   * Added in version 1.3
+   **/
+  ohifInstanceTags_[Orthanc::DICOM_TAG_RESCALE_INTERCEPT] = TagInformation(DataType_Float, "RescaleIntercept");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_RESCALE_SLOPE]     = TagInformation(DataType_Float, "RescaleSlope");
+  ohifInstanceTags_[Orthanc::DICOM_TAG_NUMBER_OF_FRAMES]  = TagInformation(DataType_Integer, "NumberOfFrames");
+
 
   // UNTESTED
   ohifInstanceTags_[Orthanc::DicomTag(0x7053, 0x1000)] = TagInformation(DataType_Float, "70531000");  // Philips SUVScaleFactor
@@ -310,22 +325,42 @@ static bool ParseTagFromOrthanc(Json::Value& target,
 
           case DataType_Integer:
           {
-            int32_t v;
-            if (Orthanc::SerializationToolbox::ParseInteger32(v, value.asString()))
+            std::vector<std::string> tokens;
+            Orthanc::Toolbox::TokenizeString(tokens, value.asString(), '\\');
+
+            if (!tokens.empty())
             {
-              target[name] = v;
+              int32_t v;
+              if (Orthanc::SerializationToolbox::ParseInteger32(v, tokens[0]))
+              {
+                target[name] = v;
+              }
+              return true;
             }
-            return true;
+            else
+            {
+              return false;
+            }
           }
 
           case DataType_Float:
           {
-            float v;
-            if (Orthanc::SerializationToolbox::ParseFloat(v, value.asString()))
+            std::vector<std::string> tokens;
+            Orthanc::Toolbox::TokenizeString(tokens, value.asString(), '\\');
+
+            if (!tokens.empty())
             {
-              target[name] = v;
+              float v;
+              if (Orthanc::SerializationToolbox::ParseFloat(v, tokens[0]))
+              {
+                target[name] = v;
+              }
+              return true;
             }
-            return true;
+            else
+            {
+              return false;
+            }
           }
 
           case DataType_ListOfStrings:
@@ -457,6 +492,10 @@ static void CacheAsMetadata(const Json::Value& instanceTags,
 static bool GetOhifInstance(Json::Value& target,
                             const std::string& instanceId)
 {
+#if 0
+  // This disables all the caching (for debugging)
+  return EncodeOhifInstance(target, instanceId);
+#else
   const std::string uri = GetCacheUri(instanceId);
   
   std::string metadata;
@@ -498,6 +537,7 @@ static bool GetOhifInstance(Json::Value& target,
   {
     return false;
   }
+#endif
 }
 
 
@@ -660,12 +700,20 @@ static void GenerateOhifStudy(Json::Value& target,
 
       study["series"] = Json::arrayValue;
 
+      std::set<std::string> modalities;
+      unsigned int countInstances = 0;
+
       for (MapOfResources::const_iterator it3 = seriesInStudy.begin(); it3 != seriesInStudy.end(); ++it3)
       {
         if (!it3->second.empty())
         {
           assert(it3->second.front() != NULL);
           const Json::Value& firstInstanceInSeries = *it3->second.front();
+
+          if (firstInstanceInSeries.isMember(Orthanc::DICOM_TAG_MODALITY.Format()))
+          {
+            modalities.insert(firstInstanceInSeries[Orthanc::DICOM_TAG_MODALITY.Format()].asString());
+          }
 
           Json::Value series = Json::objectValue;
           for (TagsDictionary::const_iterator tag = ohifSeriesTags_.begin(); tag != ohifSeriesTags_.end(); ++tag)
@@ -702,11 +750,25 @@ static void GenerateOhifStudy(Json::Value& target,
             instance["url"] = "dicomweb:../instances/" + hasher.HashInstance() + "/file";
 
             series["instances"].append(instance);
+            countInstances++;
           }
 
           study["series"].append(series);
         }
       }
+
+      std::string jsonModalities;
+      for (std::set<std::string>::const_iterator it = modalities.begin(); it != modalities.end(); ++it)
+      {
+        if (!jsonModalities.empty())
+        {
+          jsonModalities += ",";
+        }
+        jsonModalities += *it;
+      }
+
+      study["NumInstances"] = countInstances;
+      study["Modalities"] = jsonModalities;
 
       target["studies"].append(study);
     }
@@ -855,6 +917,14 @@ extern "C"
   ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext* context)
   {
     OrthancPlugins::SetGlobalContext(context, ORTHANC_PLUGIN_NAME);
+
+#if ORTHANC_FRAMEWORK_VERSION_IS_ABOVE(1, 12, 4)
+    Orthanc::Logging::InitializePluginContext(context, ORTHANC_PLUGIN_NAME);
+#elif ORTHANC_FRAMEWORK_VERSION_IS_ABOVE(1, 7, 2)
+    Orthanc::Logging::InitializePluginContext(context);
+#else
+    Orthanc::Logging::Initialize(context);
+#endif
 
     /* Check the version of the Orthanc core */
     if (OrthancPluginCheckVersion(context) == 0)
