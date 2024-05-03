@@ -27,7 +27,6 @@
 #include <Compression/GzipCompressor.h>
 #include <DicomFormat/DicomInstanceHasher.h>
 #include <DicomFormat/DicomMap.h>
-#include <Logging.h>
 #include <MultiThreading/SharedMessageQueue.h>
 #include <SerializationToolbox.h>
 #include <SystemToolbox.h>
@@ -798,11 +797,11 @@ OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
             if (preload_)
             {
               metadataThread_ = boost::thread(MetadataThread);
-              LOG(INFO) << "Started the OHIF preload thread";
+              ORTHANC_PLUGINS_LOG_INFO("Started the OHIF preload thread");
             }
             else
             {
-              LOG(INFO) << "The OHIF preload thread was not started, as indicated in the configuration file";
+              ORTHANC_PLUGINS_LOG_INFO("The OHIF preload thread was not started, as indicated in the configuration file");
             }
             break;
           }
@@ -820,7 +819,7 @@ OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
 
         if (metadataThread_.joinable())
         {
-          LOG(INFO) << "Stopping the OHIF preload thread";
+          ORTHANC_PLUGINS_LOG_INFO("Stopping the OHIF preload thread");
           metadataThread_.join();
         }
         break;
@@ -843,7 +842,7 @@ OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
   }
   catch (Orthanc::OrthancException& e)
   {
-    LOG(ERROR) << "Exception: " << e.What();
+    ORTHANC_PLUGINS_LOG_ERROR("Exception: " + std::string(e.What()));
     return static_cast<OrthancPluginErrorCode>(e.GetErrorCode());
   }
 
@@ -855,7 +854,7 @@ extern "C"
 {
   ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext* context)
   {
-    OrthancPlugins::SetGlobalContext(context);
+    OrthancPlugins::SetGlobalContext(context, ORTHANC_PLUGIN_NAME);
 
     /* Check the version of the Orthanc core */
     if (OrthancPluginCheckVersion(context) == 0)
@@ -869,12 +868,6 @@ extern "C"
       OrthancPluginLogError(context, info);
       return -1;
     }
-
-#if ORTHANC_FRAMEWORK_VERSION_IS_ABOVE(1, 7, 2)
-    Orthanc::Logging::InitializePluginContext(context);
-#else
-    Orthanc::Logging::Initialize(context);
-#endif
 
     try
     {
