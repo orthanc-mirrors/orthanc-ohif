@@ -28,7 +28,7 @@
 set -ex
 
 if [ "$1" = "" ]; then
-    PACKAGE=Viewers-3.8.0
+    PACKAGE=Viewers-3.9.0-beta.15
 else
     PACKAGE=$1
 fi

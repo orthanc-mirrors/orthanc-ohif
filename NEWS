@@ -1,7 +1,7 @@
 Pending changes in the mainline
 ===============================
 
-* Updated OHIF to 3.8.0
+* Updated OHIF to 3.9.0-beta.15 (that is actually a beta 3.8.1)
 * Patching OHIF code for https://github.com/OHIF/Viewers/issues/3928
   to allow using token args in URL
 * Enabled support for segmentation and microscopy modes
