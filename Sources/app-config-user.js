@@ -31,7 +31,11 @@ window.config = {
   // filterQueryParam: false,
   httpErrorHandler: error => {
     // This is 429 when rejected from the public idc sandbox too often.
-    console.warn(error.status);
+    if (error.status) {
+      console.warn(error.status);
+    } else {
+      console.warn(error);
+    }
   },
   hotkeys: [
     {
