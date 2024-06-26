@@ -1,0 +1,1 @@
+- PDF: apply these fixes in default config https://github.com/OHIF/Viewers/issues/4256 + https://github.com/orthanc-server/orthanc-setup-samples/commit/5af834d3d6e755e55d8d937547ace6fa39925626 once the commit has been merged and released
