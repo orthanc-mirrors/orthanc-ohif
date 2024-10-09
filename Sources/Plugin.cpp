@@ -944,7 +944,7 @@ extern "C"
       }
 
       routerBasename_ = configuration.GetStringValue("RouterBasename", "/ohif/");
-      std::string s = configuration.GetStringValue("DataSource", "dicom-json");
+      std::string s = configuration.GetStringValue("DataSource", "dicom-web");
       std::string userConfigurationPath = configuration.GetStringValue("UserConfiguration", "");
       preload_ = configuration.GetBooleanValue("Preload", true);
 
@@ -960,7 +960,7 @@ extern "C"
       {
         throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
                                         "Configuration option \"OHIF.DataSource\" must be either "
-                                        "\"dicomweb\" or \"dicom-json\", but found: " + s);
+                                        "\"dicom-web\" or \"dicom-json\", but found: " + s);
       }
 
       if (userConfigurationPath.empty())
