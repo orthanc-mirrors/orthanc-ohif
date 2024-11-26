@@ -751,13 +751,13 @@ static void GenerateOhifStudy(Json::Value& target,
       }
 
       std::string jsonModalities;
-      for (std::set<std::string>::const_iterator it = modalities.begin(); it != modalities.end(); ++it)
+      for (std::set<std::string>::const_iterator it2 = modalities.begin(); it2 != modalities.end(); ++it2)
       {
         if (!jsonModalities.empty())
         {
           jsonModalities += ",";
         }
-        jsonModalities += *it;
+        jsonModalities += *it2;
       }
 
       study["NumInstances"] = countInstances;
