@@ -948,11 +948,14 @@ extern "C"
       std::string userConfigurationPath = configuration.GetStringValue("UserConfiguration", "");
       preload_ = configuration.GetBooleanValue("Preload", true);
 
-      if (s == "dicom-web")
+      static const std::string SOURCE_DICOM_WEB = "dicom-web";
+      static const std::string SOURCE_DICOM_JSON = "dicom-json";
+
+      if (s == SOURCE_DICOM_WEB)
       {
         dataSource_ = DataSource_DicomWeb;
       }
-      else if (s == "dicom-json")
+      else if (s == SOURCE_DICOM_JSON)
       {
         dataSource_ = DataSource_DicomJson;
       }
@@ -960,7 +963,7 @@ extern "C"
       {
         throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
                                         "Configuration option \"OHIF.DataSource\" must be either "
-                                        "\"dicom-web\" or \"dicom-json\", but found: " + s);
+                                        "\"" + SOURCE_DICOM_WEB +"\" or \"" + SOURCE_DICOM_JSON + "\", but found: " + s);
       }
 
       if (userConfigurationPath.empty())

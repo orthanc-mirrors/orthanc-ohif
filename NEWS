@@ -1,7 +1,7 @@
 Pending changes in the mainline
 ===============================
 
-* Updated OHIF to 3.8.5
+* Updated OHIF to 3.9.1
 * The default value for the "DataSource" configuration is now "dicom-web"
   instead of "dicom-json" since "dicom-web" is usually
   more optimized.
