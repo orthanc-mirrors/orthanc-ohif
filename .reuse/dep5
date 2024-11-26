@@ -3,7 +3,7 @@ Upstream-Name: orthanc-ohif
 Upstream-Contact: Sebastien Jodogne <s.jodogne@gmail.com>
 Source: https://orthanc.uclouvain.be/
 
-Files: NEWS README
+Files: NEWS README TODO CITATION.cff
 Copyright: 2023-2024 Sebastien Jodogne, UCLouvain, Belgium, and 2018-2024 Open Health Imaging Foundation
 License: GPL-3.0-or-later
 
