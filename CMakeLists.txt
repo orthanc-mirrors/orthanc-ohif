@@ -32,7 +32,7 @@ else()
   set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "web")
 endif()
 
-set(METADATA_VERSION 1)
+set(METADATA_VERSION 2)
 
 
 #####################################################################

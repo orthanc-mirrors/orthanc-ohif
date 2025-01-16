@@ -2,6 +2,9 @@ Pending changes in the mainline
 ===============================
 
 * Updated OHIF to 3.9.2
+* Updated cached "dicom-json" version to 2.  This means that, when using
+  the "dicom-json" source, the cached metadata must be recomputed the first
+  time you open a study.
 
 
 Version 1.4 (2024-11-26)
