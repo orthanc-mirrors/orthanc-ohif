@@ -27,8 +27,11 @@ if (${USE_DICOM_WEB}) {
         supportsFuzzyMatching: false,
         supportsWildcard: true,
         staticWado: true,
-        singlepart: 'bulkdata,pdf,video',
-        acceptHeader: [ 'multipart/related; type=application/octet-stream; transfer-syntax=*']
+        singlepart: 'bulkdata',
+        acceptHeader: [ 'multipart/related; type=application/octet-stream; transfer-syntax=*'],
+        bulkDataURI: {  // to remove once 3.9.2+ is released (https://github.com/OHIF/Viewers/issues/4256)
+          enabled: true
+        }
       }
     }
   ];
