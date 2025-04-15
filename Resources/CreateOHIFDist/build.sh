@@ -30,7 +30,14 @@ cd /tmp/
 tar xvf /source/$1.tar.gz
 
 cd /tmp/$1
-HOME=/tmp yarn install --frozen-lockfile
-HOME=/tmp QUICK_BUILD=true PUBLIC_URL=./ yarn run build
+bun pm cache rm
+bun install --frozen-lockfile
+
+APP_CONFIG=config/default.js QUICK_BUILD=true PUBLIC_URL=./ bun run show:config
+APP_CONFIG=config/default.js QUICK_BUILD=true PUBLIC_URL=./ bun run build
+
+# patch files where the PUBLIC_URL was not taken into account
+sed -i 's|/dicom-microscopy-viewer/dicomMicroscopyViewer.min.js|./dicom-microscopy-viewer/dicomMicroscopyViewer.min.js|g' app.bundle.*.js
+sed -i 's|/assets/android-chrome-|./assets/android-chrome-|g' manifest.json
 
 cp -r /tmp/$1/platform/app/dist/* /target

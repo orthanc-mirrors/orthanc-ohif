@@ -21,14 +21,14 @@
 
 
 
-# This command-line script uses the "yarn" tool to populate the "dist"
+# This command-line script uses the "bun" tool to populate the "dist"
 # folder of OHIF. It uses Docker to this end, in order to be usable on
 # our CIS.
 
 set -ex
 
 if [ "$1" = "" ]; then
-    PACKAGE=Viewers-3.9.2
+    PACKAGE=Viewers-3.10.1
 else
     PACKAGE=$1
 fi
