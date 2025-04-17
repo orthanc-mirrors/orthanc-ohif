@@ -38,7 +38,7 @@ APP_CONFIG=config/default.js QUICK_BUILD=true PUBLIC_URL=./ bun run build
 
 # patch files where the PUBLIC_URL was not taken into account
 # Note that, for the microscopy, this is currently not working: https://github.com/OHIF/Viewers/issues/4906
-sed -i 's|\'/dicom-microscopy-viewer/dicomMicroscopyViewer.min.js|\'./dicom-microscopy-viewer/dicomMicroscopyViewer.min.js|g' /tmp/$1/platform/app/dist/app.bundle.*.js
+sed -i "s|'/dicom-microscopy-viewer/dicomMicroscopyViewer.min.js|'./dicom-microscopy-viewer/dicomMicroscopyViewer.min.js|g" /tmp/$1/platform/app/dist/app.bundle.*.js
 sed -i 's|"/dicom-microscopy-viewer|"./dicom-microscopy-viewer|g' /tmp/$1/platform/app/dist/dicom-microscopy-viewer/dicomMicroscopyViewer.min.js
 sed -i 's|"/dicom-microscopy-viewer|"./dicom-microscopy-viewer|g' /tmp/$1/platform/app/dist/dicom-microscopy-viewer/index.worker.min.worker.js
 sed -i 's|"/assets/android-chrome-|"./assets/android-chrome-|g' /tmp/$1/platform/app/dist/manifest.json
