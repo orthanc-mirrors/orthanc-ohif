@@ -27,11 +27,16 @@ if (${USE_DICOM_WEB}) {
         supportsFuzzyMatching: false,
         supportsWildcard: true,
         staticWado: true,
-        singlepart: 'bulkdata',
+        singlepart: 'bulkdata,video',
         acceptHeader: [ 'multipart/related; type=application/octet-stream; transfer-syntax=*'],
-        bulkDataURI: {  // to remove once 3.9.2+ is released (https://github.com/OHIF/Viewers/issues/4256)
-          enabled: true
+        // whether the data source should use retrieveBulkData to grab metadata,
+        // and in case of relative path, what would it be relative to, options
+        // are in the series level or study level (some servers like series some study)
+        bulkDataURI: {
+          enabled: true,
+          relativeResolution: 'studies',
         }
+        
       }
     }
   ];
