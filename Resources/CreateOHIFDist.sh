@@ -25,10 +25,14 @@
 # folder of OHIF. It uses Docker to this end, in order to be usable on
 # our CIS.
 
+# sample command to create the tar.gz archive from OHIF github repo:
+# git archive --format tar.gz --prefix Viewers-fix-video-auth-token/ -o ohif-fix-video-auth-token.tar.gz HEAD
+
 set -ex
 
 if [ "$1" = "" ]; then
     PACKAGE=Viewers-3.10.1
+    # PACKAGE=Viewers-fix-video-auth-token
 else
     PACKAGE=$1
 fi
@@ -58,6 +62,8 @@ mkdir -p ${ROOT_DIR}/OHIF/dist/
 
 ( cd ${ROOT_DIR}/Resources/CreateOHIFDist && \
       docker build --no-cache -t ${IMAGE} . )
+
+# sample manual command: docker run -it --rm -v ./Resources/CreateOHIFDist/build.sh:/source/build.sh -v ./OHIF/Viewers-3.11.0-beta.9.tar.gz:/source/Viewers-3.11.0-beta.9.tar.gz -v ./OHIF/dist/:/target orthanc-ohif-node bash
 
 docker run -t ${DOCKER_FLAGS} --rm \
        --user $(id -u):$(id -g) \

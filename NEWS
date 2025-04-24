@@ -2,7 +2,11 @@ Pending changes in the mainline
 ===============================
 
 * Updated OHIF to 3.10.1
-
+* Known issues: 
+  - authorization tokens are not functional with videos.
+    Waiting for this PR to be validated and incorporated: 
+    https://github.com/OHIF/Viewers/pull/4958
+  
 
 Version 1.5 (2025-01-17)
 ========================
