@@ -31,7 +31,7 @@
 set -ex
 
 if [ "$1" = "" ]; then
-    PACKAGE=Viewers-3.10.1
+    PACKAGE=Viewers-3.11.0
     # PACKAGE=Viewers-fix-video-auth-token
 else
     PACKAGE=$1
