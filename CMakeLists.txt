@@ -22,7 +22,7 @@
 cmake_minimum_required(VERSION 2.8)
 project(OrthancOHIF)
 
-set(ORTHANC_OHIF_VERSION "mainline")
+set(ORTHANC_OHIF_VERSION "1.7")
 
 if (ORTHANC_OHIF_VERSION STREQUAL "mainline")
   set(ORTHANC_FRAMEWORK_DEFAULT_VERSION "mainline")
