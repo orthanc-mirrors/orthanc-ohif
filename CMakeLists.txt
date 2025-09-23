@@ -19,7 +19,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 2.8...4.0)
 project(OrthancOHIF)
 
 set(ORTHANC_OHIF_VERSION "mainline")
@@ -59,7 +59,13 @@ include(${CMAKE_SOURCE_DIR}/Resources/Orthanc/CMake/DownloadOrthancFramework.cma
 
 if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "system")
   if (ORTHANC_FRAMEWORK_USE_SHARED)
-    include(FindBoost)
+    # https://cmake.org/cmake/help/latest/policy/CMP0167.html
+    if (CMAKE_VERSION VERSION_GREATER "3.30")
+      find_package(Boost CONFIG)
+    else()
+      include(FindBoost)
+    endif()
+
     find_package(Boost COMPONENTS system thread)
     
     if (NOT Boost_FOUND)
