@@ -1,6 +1,6 @@
 /**
  * SPDX-FileCopyrightText: 2023-2026 Sebastien Jodogne, ICTEAM UCLouvain, Belgium,
- * and 2018-2025 Open Health Imaging Foundation
+ * and 2018-2026 Open Health Imaging Foundation
  * SPDX-License-Identifier: MIT
  */
 
