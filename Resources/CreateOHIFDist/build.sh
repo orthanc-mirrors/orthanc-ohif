@@ -49,7 +49,8 @@ cd /tmp/$1
 APP_CONFIG=config/default.js QUICK_BUILD=true PUBLIC_URL=./ bun run show:config
 APP_CONFIG=config/default.js QUICK_BUILD=true PUBLIC_URL=./ bun run build
 
-# # patch files where the PUBLIC_URL was not taken into account
+# patch files where the PUBLIC_URL was not taken into account
+sed -i "s|var worker = new Worker(workerUrl|var worker = new Worker(new URL(window.location.protocol + '//' + window.location.host + window.location.pathname.replace('microscopy', 'dicom-microscopy-viewer') + '/dataLoader.worker.min.js')|g" /tmp/$1/platform/app/dist/dicom-microscopy-viewer/dicomMicroscopyViewer.min.js
 sed -i 's|"/assets/android-chrome-|"./assets/android-chrome-|g' /tmp/$1/platform/app/dist/manifest.json
 
 cp -r /tmp/$1/platform/app/dist/* /target
