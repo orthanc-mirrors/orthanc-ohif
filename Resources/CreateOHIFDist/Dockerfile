@@ -25,4 +25,5 @@ LABEL Description="Orthanc, free DICOM server" Vendor="The Orthanc project"
 RUN apt-get -y clean && apt-get -y update && apt-get install -y build-essential python3 && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g bun
+RUN npm install -g bun@1.2.23
+RUN npm install -g lerna@7.4.2

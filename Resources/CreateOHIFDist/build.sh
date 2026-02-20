@@ -26,21 +26,30 @@ if [ "$1" = "" ]; then
     exit -1
 fi
 
-cd /tmp/
+# note: we really copy the build process from the OHIF Dockerfile.
+mkdir /tmp/source/
+cd /tmp/source/
 tar xvf /source/$1.tar.gz
+
+mkdir /tmp/$1
+cd /tmp/source/$1
+
+cp package.json yarn.lock preinstall.js lerna.json /tmp/$1/
+cp --parents ./addOns/package.json ./addOns/*/*/package.json ./extensions/*/package.json ./modes/*/package.json ./platform/*/package.json /tmp/$1/
 
 cd /tmp/$1
 bun pm cache rm
-bun install --frozen-lockfile
+bun install
+bun add ajv@8.12.0
 
+cd /tmp/source/$1
+cp --link -r . /tmp/$1/ || true # this generates warnings but it is expected !
+
+cd /tmp/$1
 APP_CONFIG=config/default.js QUICK_BUILD=true PUBLIC_URL=./ bun run show:config
 APP_CONFIG=config/default.js QUICK_BUILD=true PUBLIC_URL=./ bun run build
 
-# patch files where the PUBLIC_URL was not taken into account
-# Note that, for the microscopy, this is currently not working: https://github.com/OHIF/Viewers/issues/4906
-sed -i "s|'/dicom-microscopy-viewer/dicomMicroscopyViewer.min.js|'./dicom-microscopy-viewer/dicomMicroscopyViewer.min.js|g" /tmp/$1/platform/app/dist/app.bundle.*.js
-sed -i 's|"/dicom-microscopy-viewer|"./dicom-microscopy-viewer|g' /tmp/$1/platform/app/dist/dicom-microscopy-viewer/dicomMicroscopyViewer.min.js
-sed -i 's|"/dicom-microscopy-viewer|"./dicom-microscopy-viewer|g' /tmp/$1/platform/app/dist/dicom-microscopy-viewer/index.worker.min.worker.js
+# # patch files where the PUBLIC_URL was not taken into account
 sed -i 's|"/assets/android-chrome-|"./assets/android-chrome-|g' /tmp/$1/platform/app/dist/manifest.json
 
 cp -r /tmp/$1/platform/app/dist/* /target
