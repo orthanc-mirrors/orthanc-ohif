@@ -1,5 +1,5 @@
-Pending changes in the mainline
-===============================
+Version 1.8 (2026-03-17)
+========================
 
 * Updated OHIF to 3.12.0
 * removed the "BulkDataURI" configuration from the default configuration.
