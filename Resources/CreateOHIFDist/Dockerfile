@@ -17,13 +17,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-FROM node:20.18.1-slim
-
-MAINTAINER Sebastien Jodogne <s.jodogne@gmail.com>
-LABEL Description="Orthanc, free DICOM server" Vendor="The Orthanc project"
+FROM node:24.15.0-slim
 
 RUN apt-get -y clean && apt-get -y update && apt-get install -y build-essential python3 && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g bun@1.2.23
-RUN npm install -g lerna@7.4.2
+RUN npm install -g pnpm@11

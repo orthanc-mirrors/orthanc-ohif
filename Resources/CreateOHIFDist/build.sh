@@ -34,20 +34,18 @@ tar xvf /source/$1.tar.gz
 mkdir /tmp/$1
 cd /tmp/source/$1
 
-cp package.json yarn.lock preinstall.js lerna.json /tmp/$1/
-cp --parents ./addOns/package.json ./addOns/*/*/package.json ./extensions/*/package.json ./modes/*/package.json ./platform/*/package.json /tmp/$1/
+cp package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc preinstall.js /tmp/$1/
+cp --parents ./extensions/*/package.json ./modes/*/package.json ./platform/*/package.json /tmp/$1/
 
 cd /tmp/$1
-bun pm cache rm
-bun install
-bun add ajv@8.12.0
+pnpm install --no-frozen-lockfile
 
 cd /tmp/source/$1
-cp --link -r . /tmp/$1/ || true # this generates warnings but it is expected !
+cp --link -r . /tmp/$1/ || true # this generates warnings for all files that already exists but it is expected (cp does not have a --exclude option)
 
 cd /tmp/$1
-APP_CONFIG=config/default.js QUICK_BUILD=true PUBLIC_URL=./ bun run show:config
-APP_CONFIG=config/default.js QUICK_BUILD=true PUBLIC_URL=./ bun run build
+APP_CONFIG=config/default.js QUICK_BUILD=true PUBLIC_URL=./ pnpm run show:config
+APP_CONFIG=config/default.js QUICK_BUILD=true PUBLIC_URL=./ pnpm run build
 
 # patch files where the PUBLIC_URL was not taken into account
 sed -i "s|var worker = new Worker(workerUrl|var worker = new Worker(new URL(window.location.protocol + '//' + window.location.host + window.location.pathname.replace('microscopy', 'dicom-microscopy-viewer') + '/dataLoader.worker.min.js')|g" /tmp/$1/platform/app/dist/dicom-microscopy-viewer/dicomMicroscopyViewer.min.js
